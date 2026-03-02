@@ -1,0 +1,8 @@
+{
+  "name": "Descontaí",
+  "description": "Uma plataforma mobile-first focada em promoções locais através de um feed de Reels, conectando consumidores a lojistas da cidade.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
