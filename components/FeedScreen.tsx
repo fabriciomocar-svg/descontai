@@ -76,20 +76,28 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
   return (
     <div className="h-full w-full bg-gray-50 overflow-y-scroll snap-y-mandatory no-scrollbar relative">
       <div className="bg-white border-b border-gray-100 flex flex-col shrink-0 snap-start">
-        <div className="w-full py-3 flex justify-between items-center px-4">
-          <div className="w-8" /> {/* Spacer */}
+        <div className="w-full py-3 px-4 relative flex items-center justify-center">
+          <div className="absolute left-4 w-8" /> {/* Spacer */}
           <Logo size="sm" />
-          <button 
-            onClick={onOpenMessages}
-            className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-full transition-colors relative"
-          >
-            <MessageCircle size={20} />
-            {unreadCount > 0 && (
-              <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-bounce">
-                {unreadCount > 9 ? '9+' : unreadCount}
+          <div className="absolute right-4 flex items-center gap-2">
+            {!isUsingMock && promotions.length > 0 && (
+              <div className="bg-rose-500 px-2 py-1 rounded-md flex items-center gap-1.5 animate-fade-in shadow-sm">
+                <div className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                <span className="text-white text-[9px] font-black uppercase tracking-tighter">AO VIVO</span>
               </div>
             )}
-          </button>
+            <button 
+              onClick={onOpenMessages}
+              className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-full transition-colors relative"
+            >
+              <MessageCircle size={20} />
+              {unreadCount > 0 && (
+                <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-bounce">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </div>
+              )}
+            </button>
+          </div>
         </div>
         <div className="px-4 flex gap-4 overflow-x-auto no-scrollbar pb-4 pt-1">
           {storesWithPromos.map((store) => {
@@ -132,13 +140,6 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
           })}
         </div>
       </div>
-
-      {!isUsingMock && promotions.length > 0 && (
-        <div className="absolute top-[140px] right-4 z-[60] bg-rose-500 px-2 py-1 rounded-md flex items-center gap-1.5 animate-fade-in shadow-md">
-          <div className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
-          <span className="text-white text-[9px] font-black uppercase tracking-tighter">AO VIVO</span>
-        </div>
-      )}
 
       {promotions.map((promo) => (
         <div key={promo.id} className="h-full snap-start mb-1">
