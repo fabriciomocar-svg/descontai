@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import Layout from './components/Layout';
 import FeedScreen from './components/FeedScreen';
 import ExploreScreen from './components/ExploreScreen';
@@ -16,7 +17,8 @@ import ChatScreen from './components/ChatScreen';
 import { ViewType, AuthUser, Store } from './types';
 import { getAuthUser, getStoreById, trackVisit, getOrCreateChat } from './constants';
 import { auth } from './firebase';
-import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import { onAuthStateChanged } from 'firebase/auth';
+import { Smartphone } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(getAuthUser());
@@ -115,7 +117,7 @@ const App: React.FC = () => {
       case 'FAQ_VIEW':
         return <FAQScreen onBack={() => setCurrentView('PROFILE')} />;
       case 'MESSAGES':
-        return <MessagesListScreen onBack={() => setCurrentView(previousView)} onOpenChat={handleOpenExistingChat} />;
+        return <MessagesListScreen onBack={() => setCurrentView(user?.role === 'MERCHANT' ? 'MERCHANT' : 'FEED')} onOpenChat={handleOpenExistingChat} />;
       case 'CHAT':
         return activeChat ? (
           <ChatScreen 
@@ -141,12 +143,24 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex justify-center items-center overflow-hidden">
-      <Layout activeView={currentView} onViewChange={setCurrentView} user={user}>
-        <div className="h-full w-full animate-fade-in">
-          {renderContent()}
-        </div>
-      </Layout>
+    <div className="h-full w-full bg-gray-100 flex items-center justify-center">
+      {/* Main App Container - Centered on Desktop */}
+      <div className="h-full w-full sm:max-w-[480px] bg-gray-50 overflow-hidden sm:shadow-2xl relative">
+        <Layout activeView={currentView} onViewChange={setCurrentView} user={user}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentView}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.2 }}
+              className="h-full w-full"
+            >
+              {renderContent()}
+            </motion.div>
+          </AnimatePresence>
+        </Layout>
+      </div>
     </div>
   );
 };

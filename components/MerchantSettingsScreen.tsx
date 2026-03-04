@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Store, AuthUser } from '../types';
 import { getAuthUser, saveUserMetadata } from '../constants';
 import { db, storage, isFirebaseConfigured, auth } from '../firebase';
-import { doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
-import { updatePassword } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { updatePassword } from 'firebase/auth';
 import { ArrowLeft, Save, Upload, Loader2, Store as StoreIcon, MapPin, Phone, Instagram, FileText, Tag, Lock } from 'lucide-react';
 
 const withTimeout = <T,>(promise: Promise<T>, ms: number = 5000): Promise<T> => {

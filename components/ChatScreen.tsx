@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, Send, Loader2 } from 'lucide-react';
-import { getAuthUser, sendMessage } from '../constants';
+import { getAuthUser, sendMessage, markChatAsRead } from '../constants';
 import { db, isFirebaseConfigured } from '../firebase';
-import { collection, query, orderBy, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { ChatMessage } from '../types';
 
 interface ChatScreenProps {
@@ -36,6 +36,12 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ chatId, recipientName, onBack }
 
     return () => unsubscribe();
   }, [chatId, user]);
+
+  useEffect(() => {
+    if (user && chatId) {
+      markChatAsRead(chatId);
+    }
+  }, [messages, user, chatId]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();

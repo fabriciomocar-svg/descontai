@@ -1,10 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { getStores } from '../constants';
+import { getStores, getCategories } from '../constants';
 import { Search, MapPin, Star, Store as StoreIconLucide, Loader2 } from 'lucide-react';
-import { Store } from '../types';
-
-const CATEGORIES = ['Todas', 'Alimentação', 'Moda', 'Beleza', 'Serviços', 'Saúde', 'Eletrônicos'];
+import { Store, Category } from '../types';
 
 interface ExploreScreenProps {
   onStoreClick?: (storeId: string) => void;
@@ -12,24 +10,29 @@ interface ExploreScreenProps {
 
 const ExploreScreen: React.FC<ExploreScreenProps> = ({ onStoreClick }) => {
   const [stores, setStores] = useState<Store[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [filteredStores, setFilteredStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
 
   useEffect(() => {
-    const fetchStores = async () => {
+    const fetchData = async () => {
       try {
-        const data = await getStores();
-        setStores(data);
-        setFilteredStores(data);
+        const [storesData, categoriesData] = await Promise.all([
+          getStores(),
+          getCategories()
+        ]);
+        setStores(storesData);
+        setFilteredStores(storesData);
+        setCategories(categoriesData);
       } catch (err) {
         console.error("Erro ao explorar lojas:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchStores();
+    fetchData();
   }, []);
 
   useEffect(() => {
@@ -69,17 +72,27 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({ onStoreClick }) => {
       <div>
         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">Categorias</h2>
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {CATEGORIES.map(cat => (
+          <button 
+            onClick={() => setSelectedCategory('Todas')}
+            className={`px-4 py-2 border rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
+              selectedCategory === 'Todas' 
+                ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100' 
+                : 'bg-white border-gray-200 text-gray-700 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600'
+            }`}
+          >
+            Todas
+          </button>
+          {categories.map(cat => (
             <button 
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.name)}
               className={`px-4 py-2 border rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
-                selectedCategory === cat 
+                selectedCategory === cat.name 
                   ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100' 
                   : 'bg-white border-gray-200 text-gray-700 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600'
               }`}
             >
-              {cat}
+              {cat.name}
             </button>
           ))}
         </div>

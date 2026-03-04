@@ -5,7 +5,7 @@ import { auth, isFirebaseConfigured } from '../firebase';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword 
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+} from 'firebase/auth';
 import { setAuthUser, saveUserMetadata, getUserMetadata, getStoreByEmail } from '../constants';
 import { UserRole, AuthUser } from '../types';
 import { Logo } from './Logo';

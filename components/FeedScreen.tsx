@@ -2,9 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import ReelCard from './ReelCard';
 import { usePromotions } from '../hooks/usePromotions';
-import { getStores } from '../constants';
+import { getStores, getAuthUser } from '../constants';
+import { db } from '../firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { Loader2, AlertCircle, CloudLightning, MessageCircle } from 'lucide-react';
-import { Store } from '../types';
+import { Store, Chat } from '../types';
 import { Logo } from './Logo';
 
 interface FeedScreenProps {
@@ -17,6 +19,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
   const { promotions, loading: promoLoading, error, isUsingMock } = usePromotions();
   const [stores, setStores] = useState<Store[]>([]);
   const [storesLoading, setStoresLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const user = getAuthUser();
 
   useEffect(() => {
     const fetchStores = async () => {
@@ -31,6 +35,23 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
     };
     fetchStores();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const chatsCol = collection(db, 'chats');
+    const q = query(chatsCol, where('userId', '==', user.id));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let count = 0;
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as Chat;
+        if (data.unreadCount && data.unreadCount > 0 && data.lastSenderId !== user.id) {
+          count += data.unreadCount;
+        }
+      });
+      setUnreadCount(count);
+    });
+    return () => unsubscribe();
+  }, [user?.id]);
 
   // Filtra as lojas que possuem pelo menos uma promoção ativa
   const storesWithPromos = React.useMemo(() => {
@@ -53,16 +74,21 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
   }
 
   return (
-    <div className="h-full w-full bg-white overflow-y-scroll snap-y-mandatory no-scrollbar relative">
-      <div className="absolute top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 flex flex-col">
+    <div className="h-full w-full bg-gray-50 overflow-y-scroll snap-y-mandatory no-scrollbar relative">
+      <div className="bg-white border-b border-gray-100 flex flex-col shrink-0 snap-start">
         <div className="w-full py-3 flex justify-between items-center px-4">
           <div className="w-8" /> {/* Spacer */}
           <Logo size="sm" />
           <button 
             onClick={onOpenMessages}
-            className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-full transition-colors relative"
           >
             <MessageCircle size={20} />
+            {unreadCount > 0 && (
+              <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-bounce">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </div>
+            )}
           </button>
         </div>
         <div className="px-4 flex gap-4 overflow-x-auto no-scrollbar pb-4 pt-1">
@@ -98,8 +124,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
                     />
                   </div>
                 </div>
-                <span className="text-[10px] text-gray-800 font-medium tracking-tight truncate w-16 text-center">
-                  {store.name.split(' ')[0]}
+                <span className="text-[9px] text-gray-800 font-bold tracking-tight w-20 text-center leading-3 line-clamp-2 h-8 flex items-center justify-center overflow-hidden">
+                  {store.name}
                 </span>
               </button>
             );
@@ -114,11 +140,10 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
         </div>
       )}
 
-      {/* Spacer for the top stories bar */}
-      <div className="h-[148px] snap-start bg-white w-full" />
-
       {promotions.map((promo) => (
-        <ReelCard key={promo.id} promotion={promo} onStoreClick={onStoreClick} onOpenChat={onOpenChat} />
+        <div key={promo.id} className="h-full snap-start mb-1">
+          <ReelCard promotion={promo} onStoreClick={onStoreClick} onOpenChat={onOpenChat} />
+        </div>
       ))}
       
       {promotions.length === 0 && (

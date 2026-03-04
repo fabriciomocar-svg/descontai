@@ -1,5 +1,5 @@
 
-import { Store, Promotion, AuthUser, UserRole, FAQ } from './types';
+import { Store, Promotion, AuthUser, UserRole, FAQ, Category } from './types';
 import { db, auth, isFirebaseConfigured } from './firebase';
 export { db, auth, isFirebaseConfigured };
 import { 
@@ -15,8 +15,8 @@ import {
   serverTimestamp,
   increment,
   orderBy
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-import { signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+} from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 
 const AUTH_KEY = 'descontai_auth_user';
 
@@ -251,6 +251,24 @@ export const deleteAllStores = async () => {
       throw new Error("⚠️ PERMISSÃO NEGADA: O Firestore bloqueou o reset total. Verifique as 'Rules' no Console do Firebase.");
     }
     console.error("Erro ao realizar reset total:", e);
+    throw e;
+  }
+};
+
+export const deletePromotion = async (id: string) => {
+  if (!isFirebaseConfigured || !db) {
+    console.error("❌ ERRO CRÍTICO: Firebase não configurado ou DB nulo no momento da exclusão.");
+    throw new Error("Banco de dados desconectado. Verifique sua conexão ou configuração.");
+  }
+  
+  console.log(`🗑️ Iniciando exclusão do documento: promotions/${id}`);
+  
+  try {
+    const promoRef = doc(db, 'promotions', id);
+    await deleteDoc(promoRef);
+    console.log(`✅ Documento promotions/${id} excluído com sucesso!`);
+  } catch (e: any) {
+    console.error(`❌ ERRO AO DELETAR (Code: ${e.code}):`, e);
     throw e;
   }
 };
@@ -494,10 +512,59 @@ export const sendMessage = async (chatId: string, senderId: string, text: string
     const chatRef = doc(db, 'chats', chatId);
     await setDoc(chatRef, {
       lastMessage: text,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      lastSenderId: senderId,
+      unreadCount: increment(1)
     }, { merge: true });
   } catch (e) {
     console.error("Erro ao enviar mensagem:", e);
+    throw e;
+  }
+};
+
+export const markChatAsRead = async (chatId: string) => {
+  if (!isFirebaseConfigured || !db) return;
+  try {
+    const chatRef = doc(db, 'chats', chatId);
+    await setDoc(chatRef, { unreadCount: 0 }, { merge: true });
+  } catch (e) {
+    console.error("Erro ao marcar chat como lido:", e);
+  }
+};
+
+// --- Category Functions ---
+
+export const getCategories = async (): Promise<Category[]> => {
+  if (!isFirebaseConfigured || !db) return [];
+  try {
+    const categoriesCol = collection(db, 'categories');
+    const snap = await getDocs(categoriesCol);
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
+  } catch (e) {
+    console.error("Erro ao buscar categorias:", e);
+    return [];
+  }
+};
+
+export const addCategory = async (name: string): Promise<Category | null> => {
+  if (!isFirebaseConfigured || !db) return null;
+  try {
+    const categoriesCol = collection(db, 'categories');
+    const docRef = await addDoc(categoriesCol, { name });
+    return { id: docRef.id, name };
+  } catch (e) {
+    console.error("Erro ao adicionar categoria:", e);
+    return null;
+  }
+};
+
+export const deleteCategory = async (id: string) => {
+  if (!isFirebaseConfigured || !db) return;
+  try {
+    const categoryRef = doc(db, 'categories', id);
+    await deleteDoc(categoryRef);
+  } catch (e) {
+    console.error("Erro ao deletar categoria:", e);
     throw e;
   }
 };

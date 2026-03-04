@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, CheckCircle, Loader2, X, Trash2, ShieldCheck, Zap, Camera, Edit3, LogOut, Film, Image as ImageIcon, Calendar, Percent, Trash, Eye, Heart, Bookmark, TrendingUp, BarChart3, Wand2, LayoutGrid, Settings, MousePointerClick, MessageCircle } from 'lucide-react';
-import { saveLocalPromotion, getAuthUser, logoutUser, getStoreById } from '../constants';
-import { storage, isFirebaseConfigured } from '../firebase';
-import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
-import { Promotion, ViewType, Store } from '../types';
+import { saveLocalPromotion, getAuthUser, logoutUser, getStoreById, deletePromotion } from '../constants';
+import { storage, isFirebaseConfigured, db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { Promotion, ViewType, Store, Chat } from '../types';
 import { usePromotions } from '../hooks/usePromotions';
 
 interface MerchantDashboardProps {
@@ -19,6 +20,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [storeData, setStoreData] = useState<Store | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   
   const [formData, setFormData] = useState({
     description: '',
@@ -30,6 +32,43 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
 
+  // Limpeza automática de promoções expiradas
+  useEffect(() => {
+    const cleanupExpiredPromotions = async () => {
+      if (!user?.merchantId || !db) return;
+      
+      try {
+        const q = query(collection(db, 'promotions'), where('storeId', '==', user.merchantId));
+        const snapshot = await getDocs(q);
+        
+        const now = new Date();
+        now.setHours(0, 0, 0, 0); // Zerar hora para comparar apenas data
+        
+        snapshot.docs.forEach(async (doc) => {
+          const data = doc.data() as Promotion;
+          if (data.expiresAt) {
+            try {
+              const [day, month, year] = data.expiresAt.split('/').map(Number);
+              const expiryDate = new Date(year, month - 1, day);
+              expiryDate.setHours(23, 59, 59, 999); // Expira no final do dia
+              
+              if (expiryDate < now) {
+                console.log(`🗑️ Auto-excluindo promoção expirada: ${doc.id} (Venceu em: ${data.expiresAt})`);
+                await deletePromotion(doc.id);
+              }
+            } catch (e) {
+              console.warn(`Erro ao processar data da promoção ${doc.id}`, e);
+            }
+          }
+        });
+      } catch (error) {
+        console.error("Erro na verificação de validade automática:", error);
+      }
+    };
+    
+    cleanupExpiredPromotions();
+  }, [user?.merchantId]);
+
   useEffect(() => {
     const fetchStore = async () => {
       if (user?.merchantId) {
@@ -39,6 +78,23 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
     };
     fetchStore();
   }, [user?.merchantId]);
+
+  useEffect(() => {
+    if (!user?.merchantId) return;
+    const chatsCol = collection(db, 'chats');
+    const q = query(chatsCol, where('merchantId', '==', user.merchantId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let count = 0;
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as Chat;
+        if (data.unreadCount && data.unreadCount > 0 && data.lastSenderId !== user.id) {
+          count += data.unreadCount;
+        }
+      });
+      setUnreadCount(count);
+    });
+    return () => unsubscribe();
+  }, [user?.merchantId, user?.id]);
 
   const merchantPromos = useMemo(() => {
     return promotions.filter(p => p.storeId === user?.merchantId);
@@ -122,6 +178,39 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
     }
   };
 
+  const [deleteConfirmationId, setDeleteConfirmationId] = useState<string | null>(null);
+
+  const confirmDelete = (id: string) => {
+    setDeleteConfirmationId(id);
+  };
+
+  const executeDelete = async () => {
+    if (!deleteConfirmationId) return;
+    
+    const id = deleteConfirmationId;
+    setLoading(true);
+    
+    try {
+      console.log(`Tentando excluir promoção ID: ${id}`);
+      await deletePromotion(id);
+      setDeleteConfirmationId(null);
+      alert("✅ Promoção excluída com sucesso!");
+    } catch (err: any) {
+      console.error("Erro detalhado ao excluir:", err);
+      const debugInfo = JSON.stringify(err, Object.getOwnPropertyNames(err));
+      
+      if (err.code === 'permission-denied') {
+        alert(`⛔ PERMISSÃO NEGADA\n\nCódigo: ${err.code}\nDetalhes: ${err.message}`);
+      } else if (err.code === 'not-found') {
+        alert(`⚠️ DOCUMENTO NÃO ENCONTRADO\n\nO ID ${id} não existe.`);
+      } else {
+        alert(`❌ ERRO TÉCNICO:\n\n${err.message}\n\nCódigo: ${err.code}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     if (confirm("Sair do Dashboard?")) await logoutUser();
   };
@@ -136,9 +225,14 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
         <div className="flex items-center gap-2">
           <button 
             onClick={onOpenMessages}
-            className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm text-indigo-600 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+            className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm text-indigo-600 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest relative"
           >
             <MessageCircle size={16} /> Chat
+            {unreadCount > 0 && (
+              <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-bounce">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </div>
+            )}
           </button>
           <button 
             onClick={() => {
@@ -203,6 +297,92 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
       <button onClick={() => setShowModal(true)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 shadow-xl transition-all active:scale-95 mb-8">
         <Plus size={24} /> NOVA OFERTA CLOUD
       </button>
+
+      {/* Lista de Promoções Ativas */}
+      <div className="mb-8">
+        <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Minhas Ofertas Ativas</h2>
+        {merchantPromos.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 bg-white rounded-[32px] border border-dashed border-gray-200">
+            <p className="text-xs font-bold">Nenhuma oferta ativa.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {merchantPromos.map((promo) => (
+              <div key={promo.id} className="bg-white p-4 rounded-[24px] border border-gray-100 shadow-sm flex gap-4 items-center">
+                <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-gray-100">
+                  {promo.videoUrl ? (
+                    <video src={promo.videoUrl} className="w-full h-full object-cover" />
+                  ) : (
+                    <img src={promo.imageUrl} alt="Promo" className="w-full h-full object-cover" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-900 truncate">{promo.description}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                      {promo.discount || 'Sem desconto'}
+                    </span>
+                    <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                      <Eye size={10} /> {promo.views || 0}
+                    </span>
+                  </div>
+                </div>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    confirmDelete(promo.id);
+                  }}
+                  className="p-4 text-rose-500 hover:bg-rose-50 active:bg-rose-100 rounded-xl transition-colors relative z-10"
+                  title="Excluir oferta"
+                  aria-label="Excluir oferta"
+                >
+                  <Trash2 size={20} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal de Confirmação de Exclusão */}
+      {deleteConfirmationId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl transform transition-all scale-100">
+            <div className="flex flex-col items-center text-center mb-6">
+              <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mb-4 text-rose-600">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Excluir Promoção?</h3>
+              <p className="text-gray-500 text-sm">
+                Esta ação não pode ser desfeita. A promoção será removida permanentemente do aplicativo.
+              </p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmationId(null)}
+                className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-colors"
+                disabled={loading}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={executeDelete}
+                className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl shadow-lg shadow-rose-200 transition-colors flex items-center justify-center gap-2"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <span>Sim, Excluir</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal simplificado para brevidade */}
       {showModal && (

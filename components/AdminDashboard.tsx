@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Store, Mail, X, Camera, LogOut, UserCheck, Loader2, Trash2, AlertTriangle, BarChart3, Users, Ticket, TrendingUp, ChevronRight, UserX, HelpCircle } from 'lucide-react';
-import { getStores, saveStore, deleteStore, deleteAllStores, logoutUser, db, isFirebaseConfigured, getDailyVisits } from '../constants';
-import { collection, getDocs, deleteDoc, doc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-import { Store as StoreType, AuthUser, ViewType } from '../types';
+import { Plus, Store, Mail, X, Camera, LogOut, UserCheck, Loader2, Trash2, AlertTriangle, BarChart3, Users, Ticket, TrendingUp, ChevronRight, UserX, HelpCircle, Tags } from 'lucide-react';
+import { getStores, saveStore, deleteStore, deleteAllStores, logoutUser, db, isFirebaseConfigured, getDailyVisits, getCategories, addCategory, deleteCategory } from '../constants';
+import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { Store as StoreType, AuthUser, ViewType, Category } from '../types';
 import { Logo } from './Logo';
 
 interface AdminDashboardProps {
@@ -11,9 +11,11 @@ interface AdminDashboardProps {
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewChange }) => {
-  const [activeTab, setActiveTab] = useState<'STATS' | 'STORES' | 'USERS'>('STATS');
+  const [activeTab, setActiveTab] = useState<'STATS' | 'STORES' | 'USERS' | 'CATEGORIES'>('STATS');
   const [stores, setStores] = useState<StoreType[]>([]);
   const [users, setUsers] = useState<AuthUser[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [stats, setStats] = useState({
     totalStores: 0,
     totalPromotions: 0,
@@ -34,14 +36,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewChange }) => {
     coverImage: ''
   });
 
-  const categories = ['Alimentação', 'Moda', 'Beleza', 'Serviços', 'Eletrônicos'];
-
   const fetchAllData = async () => {
     setLoading(true);
     try {
       // Busca lojas - getStores já tem try/catch interno e retorna MOCK_STORES em caso de erro
       const storesData = await getStores();
       setStores(storesData || []);
+      
+      const categoriesData = await getCategories();
+      setCategories(categoriesData || []);
       
       let promoCount = 0;
       let userCount = 0;
@@ -249,6 +252,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewChange }) => {
     }
   };
 
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    
+    setLoading(true);
+    try {
+      const newCat = await addCategory(newCategoryName.trim());
+      if (newCat) {
+        setCategories(prev => [...prev, newCat]);
+        setNewCategoryName('');
+      }
+    } catch (err: any) {
+      console.error("Erro ao adicionar categoria:", err);
+      alert("Erro ao adicionar categoria: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteCategoryObj = async (id: string, name: string) => {
+    if (confirm(`Tem certeza que deseja excluir a categoria "${name}"?`)) {
+      setLoading(true);
+      try {
+        await deleteCategory(id);
+        setCategories(prev => prev.filter(c => c.id !== id));
+      } catch (err: any) {
+        console.error("Erro ao excluir categoria:", err);
+        alert("Erro ao excluir categoria: " + err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   return (
     <div className="p-4 h-full bg-gray-50 overflow-y-auto pb-24 text-left">
       <div className="mb-6 flex justify-between items-center">
@@ -277,24 +314,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewChange }) => {
         </div>
       </div>
 
-      <div className="mb-6 flex p-1 bg-gray-200/50 rounded-2xl">
+      <div className="mb-6 flex p-1 bg-gray-200/50 rounded-2xl overflow-x-auto hide-scrollbar">
         <button 
           onClick={() => setActiveTab('STATS')}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === 'STATS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
+          className={`flex-1 min-w-[120px] py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${activeTab === 'STATS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
         >
-          <BarChart3 size={16} /> Visão Geral
+          <BarChart3 size={14} /> Visão
         </button>
         <button 
           onClick={() => setActiveTab('STORES')}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === 'STORES' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
+          className={`flex-1 min-w-[120px] py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${activeTab === 'STORES' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
         >
-          <Store size={16} /> Lojistas
+          <Store size={14} /> Lojistas
         </button>
         <button 
           onClick={() => setActiveTab('USERS')}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === 'USERS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
+          className={`flex-1 min-w-[120px] py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${activeTab === 'USERS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
         >
-          <Users size={16} /> Usuários
+          <Users size={14} /> Usuários
+        </button>
+        <button 
+          onClick={() => setActiveTab('CATEGORIES')}
+          className={`flex-1 min-w-[120px] py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${activeTab === 'CATEGORIES' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
+        >
+          <Tags size={14} /> Categorias
         </button>
       </div>
 
@@ -426,7 +469,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewChange }) => {
             )}
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'USERS' ? (
         <div className="animate-fade-in">
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-gray-800">Gestão de Usuários</h1>
@@ -463,6 +506,57 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewChange }) => {
             {!loading && users.length === 0 && (
               <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-gray-200">
                 <p className="text-gray-400 text-sm font-bold">Nenhum usuário encontrado.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="animate-fade-in">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-gray-800">Categorias</h1>
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1 italic">Gerenciar Categorias de Lojas</p>
+          </div>
+
+          <form onSubmit={handleAddCategory} className="mb-8 bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex gap-2">
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="Nova categoria..."
+              className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+            />
+            <button
+              type="submit"
+              disabled={!newCategoryName.trim() || loading}
+              className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+              Adicionar
+            </button>
+          </form>
+
+          <div className="space-y-3 pb-24">
+            {categories.map(category => (
+              <div key={category.id} className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                    <Tags size={20} />
+                  </div>
+                  <span className="font-bold text-gray-800">{category.name}</span>
+                </div>
+                <button
+                  onClick={() => handleDeleteCategoryObj(category.id, category.name)}
+                  className="p-3 text-rose-500 hover:bg-rose-50 rounded-2xl transition-colors active:scale-95"
+                  title="Excluir categoria"
+                >
+                  <Trash2 size={20} />
+                </button>
+              </div>
+            ))}
+            {loading && categories.length === 0 && <div className="flex justify-center p-8"><Loader2 className="animate-spin text-indigo-500" size={32} /></div>}
+            {!loading && categories.length === 0 && (
+              <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-gray-200">
+                <p className="text-gray-400 text-sm font-bold">Nenhuma categoria cadastrada.</p>
               </div>
             )}
           </div>
@@ -528,7 +622,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewChange }) => {
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Categoria</label>
                 <select className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-sm mt-1"
                   value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               </div>
 

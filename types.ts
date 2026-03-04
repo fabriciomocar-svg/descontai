@@ -44,6 +44,11 @@ export interface Promotion {
   saved: boolean;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+}
+
 export interface FAQ {
   id: string;
   question: string;
@@ -62,6 +67,7 @@ export interface Chat {
   lastMessage: string;
   updatedAt: any;
   unreadCount?: number;
+  lastSenderId?: string;
 }
 
 export interface ChatMessage {

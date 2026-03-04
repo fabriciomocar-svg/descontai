@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, MessageCircle, Loader2 } from 'lucide-react';
-import { getAuthUser, getStores, getOrCreateChat } from '../constants';
+import { getAuthUser, getStores, getOrCreateChat, markChatAsRead } from '../constants';
 import { db, isFirebaseConfigured } from '../firebase';
-import { collection, query, where, orderBy, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { Chat, ViewType, Store } from '../types';
 
 interface MessagesListScreenProps {
@@ -132,26 +132,35 @@ const MessagesListScreen: React.FC<MessagesListScreenProps> = ({ onBack, onOpenC
               {chats.map((chat) => {
                 const isMerchant = user?.role === 'MERCHANT';
                 const recipientName = isMerchant ? chat.userName : chat.storeName;
+                const unread = (chat.unreadCount && chat.unreadCount > 0 && chat.lastSenderId !== user?.id) ? chat.unreadCount : 0;
                 
                 return (
                   <button 
                     key={chat.id}
-                    onClick={() => onOpenChat(chat.id, recipientName)}
-                    className="w-full bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:bg-gray-50 transition-colors active:scale-[0.98] text-left"
+                    onClick={() => {
+                      if (unread > 0) markChatAsRead(chat.id);
+                      onOpenChat(chat.id, recipientName);
+                    }}
+                    className={`w-full bg-white p-4 rounded-2xl border shadow-sm flex items-center gap-4 hover:bg-gray-50 transition-colors active:scale-[0.98] text-left ${unread > 0 ? 'border-indigo-200 bg-indigo-50/30' : 'border-gray-100'}`}
                   >
-                    <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-lg shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-lg shrink-0 relative">
                       {recipientName.charAt(0).toUpperCase()}
+                      {unread > 0 && (
+                        <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-bounce">
+                          {unread > 9 ? '9+' : unread}
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-center mb-1">
-                        <h3 className="font-bold text-gray-900 truncate">{recipientName}</h3>
+                        <h3 className={`font-bold truncate ${unread > 0 ? 'text-indigo-900' : 'text-gray-900'}`}>{recipientName}</h3>
                         {chat.updatedAt && (
-                          <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap ml-2">
+                          <span className={`text-[10px] font-medium whitespace-nowrap ml-2 ${unread > 0 ? 'text-indigo-600' : 'text-gray-400'}`}>
                             {new Date(chat.updatedAt?.toDate?.() || Date.now()).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 truncate">{chat.lastMessage || 'Nova conversa iniciada'}</p>
+                      <p className={`text-xs truncate ${unread > 0 ? 'text-gray-800 font-semibold' : 'text-gray-500'}`}>{chat.lastMessage || 'Nova conversa iniciada'}</p>
                     </div>
                   </button>
                 );
