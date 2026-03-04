@@ -16,6 +16,7 @@ export interface Store {
   id: string;
   name: string;
   category: string;
+  categories?: string[];
   logo: string;
   coverImage?: string;
   rating: number;
