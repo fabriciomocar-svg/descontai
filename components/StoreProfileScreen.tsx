@@ -1,9 +1,10 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Store, Promotion, ViewType } from '../types';
 import { usePromotions } from '../hooks/usePromotions';
 import { getAuthUser } from '../constants';
-import { ArrowLeft, MapPin, Phone, Instagram, Star, Clock, ChevronRight, Share2, Edit3 } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Instagram, Star, Clock, ChevronRight, Share2, Edit3, X } from 'lucide-react';
+import ReelCard from './ReelCard';
 
 interface StoreProfileScreenProps {
   store: Store;
@@ -16,6 +17,7 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
   const isOwner = user?.merchantId === store.id || user?.role === 'ADMIN';
   const { promotions } = usePromotions();
   const storePromos = promotions.filter(p => p.storeId === store.id);
+  const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(null);
 
   const handleOpenMaps = () => {
     const query = encodeURIComponent(`${store.name} ${store.address}`);
@@ -153,7 +155,11 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
         {storePromos.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
             {storePromos.map(promo => (
-              <div key={promo.id} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 group">
+              <div 
+                key={promo.id} 
+                className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 group cursor-pointer active:scale-95 transition-transform"
+                onClick={() => setSelectedPromo(promo)}
+              >
                 <div className="aspect-[3/4] relative">
                   <img src={promo.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute top-2 left-2 bg-rose-500 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-lg">
@@ -175,6 +181,25 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
           </div>
         )}
       </div>
+
+      {/* Fullscreen Promotion Modal */}
+      {selectedPromo && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-200">
+          <button 
+            onClick={() => setSelectedPromo(null)}
+            className="absolute top-4 right-4 z-50 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+          >
+            <X size={24} />
+          </button>
+          <div className="flex-1 h-full w-full">
+            <ReelCard 
+              promotion={selectedPromo} 
+              isActive={true}
+              onStoreClick={() => setSelectedPromo(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

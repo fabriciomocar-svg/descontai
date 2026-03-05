@@ -7,6 +7,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { Promotion, ViewType, Store, Chat } from '../types';
 import { usePromotions } from '../hooks/usePromotions';
+import { compressImage } from '../utils/imageCompression';
 
 interface MerchantDashboardProps {
   onViewChange?: (view: ViewType) => void;
@@ -148,8 +149,23 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
 
       if (isFirebaseConfigured && storage) {
         // 1. Upload para o Firebase Storage
-        const storageRef = ref(storage, `promotions/${Date.now()}_${mediaFile.name}`);
-        const uploadSnap = await uploadBytes(storageRef, mediaFile);
+        let fileToUpload = mediaFile;
+
+        // Comprimir se for imagem
+        if (mediaType === 'image') {
+          try {
+            fileToUpload = await compressImage(mediaFile, {
+              maxWidth: 1280,
+              maxHeight: 1280,
+              quality: 0.8
+            });
+          } catch (e) {
+            console.warn("Falha na compressão, enviando original", e);
+          }
+        }
+
+        const storageRef = ref(storage, `promotions/${Date.now()}_${fileToUpload.name}`);
+        const uploadSnap = await uploadBytes(storageRef, fileToUpload);
         downloadUrl = await getDownloadURL(uploadSnap.ref);
       } else {
         console.warn("Firebase não configurado. Usando mídia em base64 local.");

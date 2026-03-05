@@ -17,7 +17,7 @@ interface FeedScreenProps {
 }
 
 const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpenMessages }) => {
-  const { promotions, loading: promoLoading, loadingMore, hasMore, loadMore, isUsingMock } = usePromotions();
+  const { promotions, stories, loading: promoLoading, loadingMore, hasMore, loadMore, isUsingMock } = usePromotions();
   const [stores, setStores] = useState<Store[]>([]);
   const [storesLoading, setStoresLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -39,26 +39,30 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
   }, []);
 
   useEffect(() => {
-    const fetchStoresAndLocation = async () => {
-      try {
-        // 1. Get User Location
-        const location = await getUserLocation();
+    const fetchData = async () => {
+      // Iniciar busca de lojas imediatamente (não bloqueia UI)
+      getStores().then(allStores => {
+        setStores(allStores.filter(s => s.isPartner));
+        setStoresLoading(false);
+      }).catch(err => {
+        console.error("Erro ao carregar lojas:", err);
+        setStoresLoading(false);
+      });
+
+      // Iniciar busca de localização em paralelo
+      getUserLocation().then(location => {
         if (location) {
           setUserLocation(location);
         } else {
           setLocationPermissionDenied(true);
         }
-
-        // 2. Get Stores
-        const allStores = await getStores();
-        setStores(allStores.filter(s => s.isPartner));
-      } catch (err) {
-        console.error("Erro ao carregar dados no feed:", err);
-      } finally {
-        setStoresLoading(false);
-      }
+      }).catch(err => {
+        console.error("Erro ao obter localização:", err);
+        setLocationPermissionDenied(true);
+      });
     };
-    fetchStoresAndLocation();
+    
+    fetchData();
   }, []);
 
   // Sort promotions by distance if location is available
@@ -155,10 +159,30 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
     return () => unsubscribe();
   }, [user?.id]);
 
-  // Filtra as lojas que possuem pelo menos uma promoção ativa
-  const storesWithPromos = React.useMemo(() => {
-    return stores.filter(store => promotions.some(p => p.storeId === store.id));
-  }, [stores, promotions]);
+  // Filtra as lojas que possuem stories ativos (baseado na lista completa de stories do contexto)
+  const storesWithStories = React.useMemo(() => {
+    // Se tiver stories carregados, usa eles. Senão, fallback para promotions locais (para evitar vazio inicial)
+    const sourceList = stories.length > 0 ? stories : promotions.map(p => ({ storeId: p.storeId, lastPromoAt: (p as any).createdAt?.seconds || 0 }));
+    
+    // Mapear IDs de lojas para objetos Store
+    const storesMap = new Map<string, Store>(stores.map(s => [s.id, s]));
+    
+    // Criar lista única de lojas com stories
+    const uniqueStoreIds = new Set<string>();
+    const result: Store[] = [];
+
+    sourceList.forEach(item => {
+      if (!uniqueStoreIds.has(item.storeId)) {
+        const store = storesMap.get(item.storeId);
+        if (store) {
+          uniqueStoreIds.add(item.storeId);
+          result.push(store);
+        }
+      }
+    });
+
+    return result;
+  }, [stores, promotions, stores]);
 
   const loading = promoLoading || storesLoading;
 
@@ -185,12 +209,6 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
           <div className="absolute left-4 w-8" /> {/* Spacer */}
           <Logo size="sm" />
           <div className="absolute right-4 flex items-center gap-2">
-            {!isUsingMock && promotions.length > 0 && (
-              <div className="bg-rose-500 px-2 py-1 rounded-md flex items-center gap-1.5 animate-fade-in shadow-sm">
-                <div className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
-                <span className="text-white text-[9px] font-black uppercase tracking-tighter">AO VIVO</span>
-              </div>
-            )}
             <button 
               onClick={onOpenMessages}
               className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-full transition-colors relative"
@@ -205,25 +223,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
           </div>
         </div>
         
-        {/* Location Status Bar */}
-        {userLocation ? (
-          <div className="w-full bg-indigo-50 py-1 flex items-center justify-center gap-1.5 animate-fade-in">
-            <MapPin size={10} className="text-indigo-600" />
-            <span className="text-[9px] font-bold text-indigo-700 uppercase tracking-wide">
-              Localização Ativa • Ofertas Próximas
-            </span>
-          </div>
-        ) : locationPermissionDenied ? (
-           <div className="w-full bg-gray-100 py-1 flex items-center justify-center gap-1.5 animate-fade-in">
-            <MapPin size={10} className="text-gray-400" />
-            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wide">
-              Localização Indisponível • Mostrando Tudo
-            </span>
-          </div>
-        ) : null}
-
         <div className="px-4 flex gap-4 overflow-x-auto no-scrollbar pb-4 pt-3">
-          {storesWithPromos.map((store) => {
+          {storesWithStories.map((store) => {
             // Encontra a promoção mais recente desta loja
             const latestPromo = promotions.find(p => p.storeId === store.id);
             const displayImage = store.logo;
