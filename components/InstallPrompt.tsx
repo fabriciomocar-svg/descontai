@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Share, Download } from 'lucide-react';
+import { X, Share, Download, ChevronDown, PlusSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Logo } from './Logo';
 
@@ -98,12 +98,26 @@ const InstallPrompt: React.FC = () => {
                 </h3>
                 
                 {isIOS ? (
-                  <div className="text-xs text-gray-600 space-y-2 mt-2">
-                    <p>Para instalar no iPhone/iPad:</p>
-                    <ol className="list-decimal pl-4 space-y-1 font-medium">
-                      <li>Toque no botão <span className="inline-flex items-center mx-1 text-indigo-600"><Share size={12} /> Compartilhar</span></li>
-                      <li>Selecione <span className="font-bold text-gray-900">"Adicionar à Tela de Início"</span></li>
+                  <div className="text-xs text-gray-600 space-y-3 mt-3">
+                    <p className="font-bold text-indigo-600">Instalação no iPhone/iPad:</p>
+                    <ol className="list-decimal pl-4 space-y-2 font-medium">
+                      <li>
+                        Toque no botão <span className="inline-flex items-center justify-center bg-gray-100 p-1 rounded mx-1 align-middle"><Share size={14} className="text-blue-500" /></span> 
+                        na barra inferior do navegador.
+                      </li>
+                      <li>
+                        Role para baixo e selecione <span className="inline-flex items-center font-bold text-gray-900 mx-1 align-middle"><PlusSquare size={14} className="mr-1" /> "Adicionar à Tela de Início"</span>.
+                      </li>
+                      <li>
+                        Confirme clicando em <span className="font-bold text-blue-600">"Adicionar"</span> no topo da tela.
+                      </li>
                     </ol>
+                    
+                    {/* Visual cue pointing down */}
+                    <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center animate-bounce opacity-70 pointer-events-none">
+                        <span className="text-[10px] font-bold text-white bg-black/50 px-2 py-0.5 rounded-full mb-1 whitespace-nowrap">O botão fica aqui embaixo</span>
+                        <ChevronDown size={24} className="text-indigo-600 drop-shadow-sm" />
+                    </div>
                   </div>
                 ) : (
                   <>
