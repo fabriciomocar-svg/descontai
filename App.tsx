@@ -23,6 +23,8 @@ import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { Smartphone } from 'lucide-react';
 
+import { PromotionsProvider } from './context/PromotionsContext';
+
 const App: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(getAuthUser());
   const [currentView, setCurrentView] = useState<ViewType>('AUTH');
@@ -76,10 +78,19 @@ const App: React.FC = () => {
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleAuthChange();
+      }
+    };
+
     handleAuthChange();
     window.addEventListener('auth_change', handleAuthChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
     return () => {
       window.removeEventListener('auth_change', handleAuthChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsubscribe();
       clearTimeout(splashTimer);
     };
@@ -163,26 +174,28 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-gray-100 flex items-center justify-center">
-      {/* Main App Container - Centered on Desktop */}
-      <div className="h-full w-full sm:max-w-[480px] bg-gray-50 overflow-hidden sm:shadow-2xl relative">
-        <Layout activeView={currentView} onViewChange={setCurrentView} user={user}>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentView}
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.2 }}
-              className="h-full w-full"
-            >
-              {renderContent()}
-            </motion.div>
-          </AnimatePresence>
-        </Layout>
-        <InstallPrompt />
+    <PromotionsProvider>
+      <div className="h-full w-full bg-gray-100 flex items-center justify-center">
+        {/* Main App Container - Centered on Desktop */}
+        <div className="h-full w-full sm:max-w-[480px] bg-gray-50 overflow-hidden sm:shadow-2xl relative">
+          <Layout activeView={currentView} onViewChange={setCurrentView} user={user}>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentView}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+                className="h-full w-full"
+              >
+                {renderContent()}
+              </motion.div>
+            </AnimatePresence>
+          </Layout>
+          <InstallPrompt />
+        </div>
       </div>
-    </div>
+    </PromotionsProvider>
   );
 };
 
