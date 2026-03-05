@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { logoutUser, getAuthUser, saveUserMetadata, setAuthUser, getUserMetadata, deleteAccount } from '../constants';
 import { usePromotions } from '../hooks/usePromotions';
 import { usePushNotifications } from '../hooks/usePushNotifications';
-import { Settings, Bookmark, Bell, HelpCircle, LogOut, ChevronRight, MapPin, Camera, Loader2, BellOff, Shield, Trash2 } from 'lucide-react';
+import { Settings, Bookmark, Bell, HelpCircle, LogOut, ChevronRight, MapPin, Camera, Loader2, BellOff, Shield, Trash2, Download } from 'lucide-react';
 import { AuthUser, ViewType, Promotion } from '../types';
 
 interface ProfileScreenProps {
@@ -153,6 +153,17 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onViewChange }) => {
                     {permission === 'granted' ? 'Ativadas' : permission === 'denied' ? 'Bloqueadas' : 'Toque para ativar'}
                   </span>
                 </div>
+              </div>
+              <ChevronRight className="text-gray-300" size={18} />
+            </button>
+
+            <button 
+              onClick={() => window.dispatchEvent(new Event('show-install-prompt'))}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-50 text-indigo-600 p-2 rounded-lg"><Download size={18} /></div>
+                <span className="text-sm font-bold text-gray-700">Instalar Aplicativo</span>
               </div>
               <ChevronRight className="text-gray-300" size={18} />
             </button>
