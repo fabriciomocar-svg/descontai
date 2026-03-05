@@ -1,19 +1,29 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Promotion } from '../types';
-import { db, auth, isFirebaseConfigured } from '../firebase';
+import { db, isFirebaseConfigured } from '../firebase';
 import { 
   collection, 
   query, 
   orderBy, 
-  onSnapshot 
+  limit,
+  getDocs,
+  startAfter,
+  QueryDocumentSnapshot,
+  DocumentData
 } from 'firebase/firestore';
+
+const PAGE_SIZE = 5;
 
 export const usePromotions = () => {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchPromotions = useCallback(async (isInitial = false) => {
     if (!isFirebaseConfigured || !db) {
       setPromotions([]);
       setLoading(false);
@@ -21,54 +31,93 @@ export const usePromotions = () => {
     }
 
     try {
-      const q = query(collection(db, 'promotions'), orderBy('createdAt', 'desc'));
+      if (isInitial) {
+        setLoading(true);
+        setError(null);
+      } else {
+        setLoadingMore(true);
+      }
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const promoList = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Promotion[];
-        
-        // Filtrar promoções expiradas
-        const now = new Date();
-        now.setHours(0, 0, 0, 0); // Zerar hora para comparar apenas data
+      let q = query(
+        collection(db, 'promotions'), 
+        orderBy('createdAt', 'desc'),
+        limit(PAGE_SIZE)
+      );
 
-        const activePromos = promoList.filter(promo => {
-          if (!promo.expiresAt) return true; // Se não tiver data, assume válida
-          
-          try {
-            // Formato esperado: DD/MM/YYYY
-            const [day, month, year] = promo.expiresAt.split('/').map(Number);
-            const expiryDate = new Date(year, month - 1, day);
-            expiryDate.setHours(23, 59, 59, 999); // Expira no final do dia
-            
-            return expiryDate >= now;
-          } catch (e) {
-            console.warn(`Erro ao processar data de validade da promoção ${promo.id}:`, e);
-            return true; // Em caso de erro, mantém (melhor mostrar do que esconder indevidamente)
-          }
-        });
+      if (!isInitial && lastDoc) {
+        q = query(
+          collection(db, 'promotions'), 
+          orderBy('createdAt', 'desc'),
+          startAfter(lastDoc),
+          limit(PAGE_SIZE)
+        );
+      }
 
-        setPromotions(activePromos);
-        setLoading(false);
-      }, (error: any) => {
-        console.error("Erro ao carregar promoções:", error);
-        setPromotions([]);
-        setLoading(false);
+      const snapshot = await getDocs(q);
+      
+      const newPromos = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Promotion[];
+
+      // Filtrar promoções expiradas
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+
+      const activePromos = newPromos.filter(promo => {
+        if (!promo.expiresAt) return true;
+        try {
+          const [day, month, year] = promo.expiresAt.split('/').map(Number);
+          const expiryDate = new Date(year, month - 1, day);
+          expiryDate.setHours(23, 59, 59, 999);
+          return expiryDate >= now;
+        } catch (e) {
+          return true;
+        }
       });
 
-      return () => unsubscribe();
-    } catch (error) {
-      console.error("Erro ao configurar snapshot de promoções:", error);
-      setPromotions([]);
+      if (snapshot.docs.length < PAGE_SIZE) {
+        setHasMore(false);
+      }
+
+      if (snapshot.docs.length > 0) {
+        setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+      }
+
+      setPromotions(prev => isInitial ? activePromos : [...prev, ...activePromos]);
+    } catch (err: any) {
+      console.error("Erro ao carregar promoções:", err);
+      setError(err.message);
+    } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
+  }, [lastDoc]);
+
+  useEffect(() => {
+    fetchPromotions(true);
   }, []);
+
+  const loadMore = () => {
+    if (!loading && !loadingMore && hasMore) {
+      fetchPromotions(false);
+    }
+  };
+
+  const refresh = () => {
+    setLastDoc(null);
+    setHasMore(true);
+    fetchPromotions(true);
+  };
 
   return { 
     promotions, 
     loading, 
-    error: null, 
+    loadingMore,
+    hasMore,
+    loadMore,
+    refresh,
+    error, 
     isUsingMock: false
   };
 };

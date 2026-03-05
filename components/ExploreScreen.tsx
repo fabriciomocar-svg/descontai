@@ -23,9 +23,18 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({ onStoreClick }) => {
           getStores(),
           getCategories()
         ]);
+        
         setStores(storesData);
         setFilteredStores(storesData);
-        setCategories(categoriesData);
+        
+        if (categoriesData.length === 0) {
+          // Fallback: extract unique categories from stores if the categories collection is empty
+          const allCategories = storesData.flatMap(s => s.categories && s.categories.length > 0 ? s.categories : [s.category]).filter(Boolean);
+          const uniqueCategories = Array.from(new Set(allCategories));
+          setCategories(uniqueCategories.map(name => ({ id: name, name })));
+        } else {
+          setCategories(categoriesData);
+        }
       } catch (err) {
         console.error("Erro ao explorar lojas:", err);
       } finally {
@@ -39,16 +48,29 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({ onStoreClick }) => {
     let result = stores;
 
     if (selectedCategory !== 'Todas') {
-      result = result.filter(store => store.category === selectedCategory);
+      const targetCategory = selectedCategory.trim().toLowerCase();
+      result = result.filter(store => {
+        const storeCategories = store.categories && store.categories.length > 0 
+          ? store.categories 
+          : [store.category || ''];
+        
+        return storeCategories.some(cat => cat.trim().toLowerCase() === targetCategory);
+      });
     }
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
-      result = result.filter(store => 
-        store.name.toLowerCase().includes(query) || 
-        store.category.toLowerCase().includes(query) ||
-        (store.description && store.description.toLowerCase().includes(query))
-      );
+      result = result.filter(store => {
+        const nameMatch = (store.name || '').toLowerCase().includes(query);
+        
+        const storeCategories = store.categories && store.categories.length > 0 
+          ? store.categories 
+          : [store.category || ''];
+        const categoryMatch = storeCategories.some(cat => cat.toLowerCase().includes(query));
+        
+        const descMatch = (store.description || '').toLowerCase().includes(query);
+        return nameMatch || categoryMatch || descMatch;
+      });
     }
 
     setFilteredStores(result);
@@ -115,7 +137,9 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({ onStoreClick }) => {
               <img src={store.logo} alt={store.name} className="w-16 h-16 rounded-xl object-cover" />
               <div className="flex-1">
                 <h3 className="font-bold text-gray-900">{store.name}</h3>
-                <p className="text-xs text-gray-500 mb-2">{store.category}</p>
+                <p className="text-xs text-gray-500 mb-2 truncate">
+                  {(store.categories && store.categories.length > 0 ? store.categories : [store.category]).join(', ')}
+                </p>
                 <div className="flex items-center gap-3">
                    <div className="flex items-center gap-1 text-amber-500">
                     <Star size={12} fill="currentColor" />

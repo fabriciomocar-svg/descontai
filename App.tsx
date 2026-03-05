@@ -14,6 +14,8 @@ import FAQManager from './components/FAQManager';
 import FAQScreen from './components/FAQScreen';
 import MessagesListScreen from './components/MessagesListScreen';
 import ChatScreen from './components/ChatScreen';
+import PrivacyScreen from './components/PrivacyScreen';
+import { SplashScreen } from './components/SplashScreen';
 import { ViewType, AuthUser, Store } from './types';
 import { getAuthUser, getStoreById, trackVisit, getOrCreateChat } from './constants';
 import { auth } from './firebase';
@@ -26,10 +28,16 @@ const App: React.FC = () => {
   const [previousView, setPreviousView] = useState<ViewType>('FEED');
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [activeChat, setActiveChat] = useState<{id: string, name: string} | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Registra a visita ao carregar o app
     trackVisit();
+
+    // Simula um tempo mínimo de splash screen para experiência "app nativo"
+    const splashTimer = setTimeout(() => {
+      // O loading só será false quando o auth também tiver respondido (veja abaixo)
+    }, 2000);
 
     // Sincroniza com o Firebase Auth
     let unsubscribe = () => {};
@@ -47,7 +55,11 @@ const App: React.FC = () => {
             setCurrentView('AUTH');
           }
         }
+        // Garante que o splash screen fique visível por pelo menos 1.5s
+        setTimeout(() => setIsLoading(false), 1500);
       });
+    } else {
+      setTimeout(() => setIsLoading(false), 1500);
     }
 
     const handleAuthChange = () => {
@@ -68,6 +80,7 @@ const App: React.FC = () => {
     return () => {
       window.removeEventListener('auth_change', handleAuthChange);
       unsubscribe();
+      clearTimeout(splashTimer);
     };
   }, []);
 
@@ -96,6 +109,10 @@ const App: React.FC = () => {
     setCurrentView('CHAT');
   };
 
+  if (isLoading) {
+    return <SplashScreen />;
+  }
+
   const renderContent = () => {
     if (!user) return <AuthScreen />;
 
@@ -116,6 +133,8 @@ const App: React.FC = () => {
         return <FAQManager onBack={() => setCurrentView('ADMIN_STORES')} />;
       case 'FAQ_VIEW':
         return <FAQScreen onBack={() => setCurrentView('PROFILE')} />;
+      case 'PRIVACY_VIEW':
+        return <PrivacyScreen onBack={() => setCurrentView('PROFILE')} />;
       case 'MESSAGES':
         return <MessagesListScreen onBack={() => setCurrentView(user?.role === 'MERCHANT' ? 'MERCHANT' : 'FEED')} onOpenChat={handleOpenExistingChat} />;
       case 'CHAT':

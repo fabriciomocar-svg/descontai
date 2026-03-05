@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Store, AuthUser } from '../types';
-import { getAuthUser, saveUserMetadata } from '../constants';
+import { Store, AuthUser, Category } from '../types';
+import { getAuthUser, saveUserMetadata, getCategories } from '../constants';
 import { db, storage, isFirebaseConfigured, auth } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -26,6 +26,7 @@ const MerchantSettingsScreen: React.FC<MerchantSettingsScreenProps> = ({ onBack 
   const [formData, setFormData] = useState<Partial<Store>>({
     name: '',
     category: '',
+    categories: [],
     address: '',
     phone: '',
     instagram: '',
@@ -33,6 +34,8 @@ const MerchantSettingsScreen: React.FC<MerchantSettingsScreenProps> = ({ onBack 
     logo: '',
     coverImage: ''
   });
+
+  const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
 
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -50,13 +53,19 @@ const MerchantSettingsScreen: React.FC<MerchantSettingsScreenProps> = ({ onBack 
       }
 
       try {
-        const storeId = user.merchantId || `store_${user.id}`;
-        const storeRef = doc(db, 'stores', storeId);
-        const snap = await withTimeout(getDoc(storeRef)) as any;
+        const [snap, categoriesData] = await Promise.all([
+          withTimeout(getDoc(doc(db, 'stores', user.merchantId || `store_${user.id}`))) as any,
+          getCategories()
+        ]);
+
+        setAvailableCategories(categoriesData);
 
         if (snap.exists()) {
           const data = snap.data() as Store;
-          setFormData(data);
+          setFormData({
+            ...data,
+            categories: data.categories || (data.category ? [data.category] : [])
+          });
           if (data.logo) setLogoPreview(data.logo);
           if (data.coverImage) setCoverPreview(data.coverImage);
         } else {
@@ -91,6 +100,23 @@ const MerchantSettingsScreen: React.FC<MerchantSettingsScreenProps> = ({ onBack 
       reader.onloadend = () => setCoverPreview(reader.result as string);
       reader.readAsDataURL(file);
     }
+  };
+
+  const toggleCategory = (catName: string) => {
+    setFormData(prev => {
+      const current = prev.categories || [];
+      const isSelected = current.includes(catName);
+      let nextCategories = isSelected 
+        ? current.filter(c => c !== catName)
+        : [...current, catName];
+      
+      return {
+        ...prev,
+        categories: nextCategories,
+        // Mantém a primeira categoria como principal para compatibilidade
+        category: nextCategories.length > 0 ? nextCategories[0] : ''
+      };
+    });
   };
 
   const handlePasswordChange = async () => {
@@ -284,23 +310,47 @@ const MerchantSettingsScreen: React.FC<MerchantSettingsScreenProps> = ({ onBack 
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-2">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
-              <Tag size={12} /> Categoria
+              <Tag size={12} /> Categorias (Selecione uma ou mais)
             </label>
-            <select 
-              value={formData.category} 
-              onChange={e => setFormData({...formData, category: e.target.value})}
-              className="w-full p-4 bg-white border border-gray-200 rounded-2xl text-sm font-medium outline-none focus:border-indigo-500 transition-colors appearance-none"
-            >
-              <option value="">Selecione uma categoria</option>
-              <option value="Alimentação">Alimentação</option>
-              <option value="Moda">Moda</option>
-              <option value="Eletrônicos">Eletrônicos</option>
-              <option value="Serviços">Serviços</option>
-              <option value="Saúde">Saúde</option>
-              <option value="Outros">Outros</option>
-            </select>
+            <div className="flex flex-wrap gap-2">
+              {availableCategories.length > 0 ? (
+                availableCategories.map(cat => {
+                  const isSelected = (formData.categories || []).includes(cat.name);
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => toggleCategory(cat.name)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors border ${
+                        isSelected 
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  );
+                })
+              ) : (
+                ['Alimentação', 'Moda', 'Eletrônicos', 'Serviços', 'Saúde', 'Beleza', 'Outros'].map(cat => {
+                  const isSelected = (formData.categories || []).includes(cat);
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => toggleCategory(cat)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors border ${
+                        isSelected 
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -351,13 +401,9 @@ const MerchantSettingsScreen: React.FC<MerchantSettingsScreenProps> = ({ onBack 
                 <input 
                   type="text" 
                   value={formData.instagram} 
-                  onChange={e => {
-                    let val = e.target.value;
-                    if (val.startsWith('@')) val = val.substring(1);
-                    setFormData({...formData, instagram: val});
-                  }}
+                  onChange={e => setFormData({...formData, instagram: e.target.value})}
                   className="w-full p-4 bg-white border border-gray-200 rounded-2xl text-sm font-medium outline-none focus:border-indigo-500 transition-colors"
-                  placeholder="usuario (sem @)"
+                  placeholder="@usuario"
                 />
               </div>
             </div>

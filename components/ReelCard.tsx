@@ -2,14 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Promotion } from '../types';
 import { Heart, MessageCircle, Share2, Bookmark, MapPin, MoreHorizontal, CheckCircle, X } from 'lucide-react';
 import { toggleSavePromotion, toggleLikePromotion, incrementPromotionView, getUserMetadata, getAuthUser } from '../constants';
+import { logViewPromotion, logClickVisitStore } from '../utils/analytics';
 
 interface ReelCardProps {
   promotion: Promotion;
   onStoreClick?: (storeId: string) => void;
   onOpenChat?: (merchantId: string, storeName: string, promotionId?: string) => void;
+  isActive?: boolean;
+  distance?: number;
 }
 
-const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat }) => {
+const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat, isActive = false, distance }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [savePop, setSavePop] = useState(false);
@@ -33,17 +36,21 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
     
     // Increment view when card is rendered
     incrementPromotionView(promotion.id);
-  }, [promotion.id]);
+    logViewPromotion(promotion.id, promotion.storeName);
+  }, [promotion.id, promotion.storeName]);
 
-  // Auto-play logic simulation for video reels
+  // Handle video play/pause based on isActive prop
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.play().catch(() => {
-        // Autoplay might be blocked by browser until user interacts
-        console.log("Autoplay blocked, waiting for interaction");
-      });
+      if (isActive && !isFullscreen) {
+        videoRef.current.play().catch(() => {
+          console.log("Autoplay blocked");
+        });
+      } else {
+        videoRef.current.pause();
+      }
     }
-  }, []);
+  }, [isActive, isFullscreen]);
 
   const handleSave = async () => {
     const newState = !isSaved;
@@ -113,13 +120,22 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
             <h3 className="text-sm font-black text-gray-900 leading-none">{promotion.storeName}</h3>
             <div className="flex items-center gap-1 mt-0.5">
               <MapPin size={10} className="text-gray-400" />
-              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">A 500m</span>
+              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                {distance !== undefined 
+                  ? distance < 1 
+                    ? `A ${Math.round(distance * 1000)}m` 
+                    : `A ${distance.toFixed(1)}km`
+                  : 'Localização indisponível'}
+              </span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => onStoreClick?.(promotion.storeId)}
+            onClick={() => {
+              onStoreClick?.(promotion.storeId);
+              logClickVisitStore(promotion.storeId, promotion.storeName);
+            }}
             className="px-3 py-1 bg-gray-50 hover:bg-gray-100 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-wide transition-colors"
           >
             Visitar

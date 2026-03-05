@@ -113,8 +113,18 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validação de Tamanho
+      const isVideo = file.type.startsWith('video/');
+      const maxSize = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024; // 50MB video, 5MB image
+      
+      if (file.size > maxSize) {
+        alert(`⚠️ O arquivo é muito grande.\nLimite para ${isVideo ? 'vídeos' : 'imagens'}: ${maxSize / (1024 * 1024)}MB.`);
+        e.target.value = ''; // Limpar input
+        return;
+      }
+
       setMediaFile(file);
-      setMediaType(file.type.startsWith('video/') ? 'video' : 'image');
+      setMediaType(isVideo ? 'video' : 'image');
       const reader = new FileReader();
       reader.onloadend = () => setMediaPreview(reader.result as string);
       reader.readAsDataURL(file);
@@ -124,6 +134,11 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
   const handleCreatePromo = async () => {
     if (!formData.description || !mediaFile || !formData.expiresAt) {
       alert("⚠️ Preencha a descrição, selecione uma imagem/vídeo e defina a validade.");
+      return;
+    }
+
+    if (formData.description.length > 500) {
+      alert("⚠️ A descrição deve ter no máximo 500 caracteres.");
       return;
     }
 
@@ -252,9 +267,11 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
       {storeData && (
         <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm mb-8 flex items-center gap-4">
           <img src={storeData.logo} alt={storeData.name} className="w-16 h-16 rounded-2xl object-cover border border-gray-100" />
-          <div>
-            <h2 className="text-lg font-black text-gray-900 leading-tight">{storeData.name}</h2>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{storeData.category}</p>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-black text-gray-900 leading-tight truncate">{storeData.name}</h2>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest truncate">
+              {(storeData.categories && storeData.categories.length > 0 ? storeData.categories : [storeData.category]).join(', ')}
+            </p>
           </div>
         </div>
       )}

@@ -28,6 +28,22 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
     }
   };
 
+  const getInstagramUrl = () => {
+    if (!store?.instagram) return undefined;
+    let handle = store.instagram.trim();
+    
+    if (handle.startsWith('@')) {
+      handle = handle.substring(1);
+    } else if (handle.toLowerCase().includes('instagram.com/')) {
+      const parts = handle.split(/instagram\.com\//i);
+      if (parts[1]) {
+        handle = parts[1].split('/')[0].split('?')[0];
+      }
+    }
+    
+    return `https://instagram.com/${handle}`;
+  };
+
   return (
     <div className="h-full w-full bg-white overflow-y-auto no-scrollbar pb-24 text-left">
       {/* Top Banner & Header */}
@@ -75,7 +91,13 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
           </div>
 
           <h1 className="text-2xl font-black text-gray-900 tracking-tight">{store.name}</h1>
-          <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1">{store.category}</p>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {(store.categories && store.categories.length > 0 ? store.categories : [store.category]).map((cat, idx) => (
+              <span key={idx} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-widest">
+                {cat}
+              </span>
+            ))}
+          </div>
           
           <p className="text-sm text-gray-500 mt-4 leading-relaxed font-medium">
             {store.description || 'Uma das melhores lojas parceiras do Descontaí, oferecendo sempre as melhores promoções da cidade.'}
@@ -88,12 +110,14 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
             >
               <Phone size={16} /> WHATSAPP
             </button>
-            <button 
-              className="flex items-center justify-center gap-2 bg-gradient-to-tr from-yellow-500 via-rose-500 to-purple-600 text-white py-4 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all"
-              onClick={() => store.instagram && window.open(`https://instagram.com/${store.instagram}`, '_blank')}
+            <a 
+              href={getInstagramUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center justify-center gap-2 bg-gradient-to-tr from-yellow-500 via-rose-500 to-purple-600 text-white py-4 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all ${!store.instagram ? 'opacity-50 pointer-events-none' : ''}`}
             >
               <Instagram size={16} /> INSTAGRAM
-            </button>
+            </a>
           </div>
         </div>
       </div>

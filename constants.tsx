@@ -16,7 +16,7 @@ import {
   increment,
   orderBy
 } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
+import { signOut, deleteUser } from 'firebase/auth';
 
 const AUTH_KEY = 'descontai_auth_user';
 
@@ -42,6 +42,37 @@ export const logoutUser = async () => {
     }
   }
   setAuthUser(null);
+};
+
+export const deleteAccount = async () => {
+  if (!auth || !auth.currentUser) return;
+  
+  const user = auth.currentUser;
+  const userId = user.uid;
+
+  try {
+    // 1. Delete user document from Firestore
+    if (db) {
+      const userRef = doc(db, 'users', userId);
+      await deleteDoc(userRef);
+    }
+
+    // 2. Delete user from Firebase Auth
+    await deleteUser(user);
+    
+    // 3. Clear local storage and state
+    setAuthUser(null);
+    localStorage.clear();
+    
+    // 4. Reload to ensure clean state
+    window.location.reload();
+  } catch (error: any) {
+    console.error("Error deleting account:", error);
+    if (error.code === 'auth/requires-recent-login') {
+      throw new Error("Para sua segurança, faça login novamente antes de excluir sua conta.");
+    }
+    throw error;
+  }
 };
 
 // Salva metadados do usuário no Firestore (como o Role)
@@ -532,7 +563,45 @@ export const markChatAsRead = async (chatId: string) => {
   }
 };
 
-// --- Category Functions ---
+// --- Geolocation Functions ---
+export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Radius of the earth in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c; // Distance in km
+  return d;
+};
+
+const deg2rad = (deg: number): number => {
+  return deg * (Math.PI / 180);
+};
+
+export const getUserLocation = (): Promise<{ lat: number; lng: number } | null> => {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+      },
+      (error) => {
+        console.warn("Geolocation error:", error);
+        resolve(null);
+      },
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+    );
+  });
+};
 
 export const getCategories = async (): Promise<Category[]> => {
   if (!isFirebaseConfigured || !db) return [];

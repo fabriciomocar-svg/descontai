@@ -27,6 +27,8 @@ export interface Store {
   phone?: string;
   instagram?: string;
   description?: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface Promotion {
@@ -79,4 +81,4 @@ export interface ChatMessage {
   createdAt: any;
 }
 
-export type ViewType = 'AUTH' | 'FEED' | 'EXPLORE' | 'MERCHANT' | 'PROFILE' | 'ADMIN_STORES' | 'STORE_PROFILE' | 'MERCHANT_SETTINGS' | 'FAQ_MANAGER' | 'FAQ_VIEW' | 'MESSAGES' | 'CHAT';
+export type ViewType = 'AUTH' | 'FEED' | 'EXPLORE' | 'MERCHANT' | 'PROFILE' | 'ADMIN_STORES' | 'STORE_PROFILE' | 'MERCHANT_SETTINGS' | 'FAQ_MANAGER' | 'FAQ_VIEW' | 'MESSAGES' | 'CHAT' | 'PRIVACY_VIEW';

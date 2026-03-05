@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { logoutUser, getAuthUser, saveUserMetadata, setAuthUser, getUserMetadata } from '../constants';
+import { logoutUser, getAuthUser, saveUserMetadata, setAuthUser, getUserMetadata, deleteAccount } from '../constants';
 import { usePromotions } from '../hooks/usePromotions';
-import { Settings, Bookmark, Bell, HelpCircle, LogOut, ChevronRight, MapPin, Camera, Loader2 } from 'lucide-react';
+import { usePushNotifications } from '../hooks/usePushNotifications';
+import { Settings, Bookmark, Bell, HelpCircle, LogOut, ChevronRight, MapPin, Camera, Loader2, BellOff, Shield, Trash2 } from 'lucide-react';
 import { AuthUser, ViewType, Promotion } from '../types';
 
 interface ProfileScreenProps {
@@ -12,8 +13,10 @@ interface ProfileScreenProps {
 const ProfileScreen: React.FC<ProfileScreenProps> = ({ onViewChange }) => {
   const user = getAuthUser();
   const { promotions } = usePromotions();
+  const { permission, requestPermission } = usePushNotifications();
   const [savedPromos, setSavedPromos] = useState<Promotion[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const fetchSavedPromos = async () => {
@@ -32,6 +35,28 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onViewChange }) => {
 
   const handleLogout = async () => {
     await logoutUser();
+  };
+
+  const handleNotificationToggle = async () => {
+    if (permission === 'default') {
+      await requestPermission();
+    } else if (permission === 'denied') {
+      alert('As notificações estão bloqueadas. Por favor, habilite nas configurações do seu navegador.');
+    } else {
+      alert('Notificações já estão ativadas!');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (window.confirm("Tem certeza que deseja excluir sua conta? Esta ação é irreversível e todos os seus dados serão perdidos.")) {
+      setIsDeleting(true);
+      try {
+        await deleteAccount();
+      } catch (error: any) {
+        alert(error.message || "Erro ao excluir conta. Tente novamente.");
+        setIsDeleting(false);
+      }
+    }
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,16 +136,26 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onViewChange }) => {
           </div>
         </div>
 
-        <div className="space-y-3">
-          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 mb-1">Conta & Preferências</h3>
-          
-          <button className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-50 text-blue-600 p-2 rounded-lg"><Bell size={18} /></div>
-              <span className="text-sm font-bold text-gray-700">Notificações</span>
-            </div>
-            <ChevronRight className="text-gray-300" size={18} />
-          </button>
+          <div className="space-y-3">
+            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 mb-1">Conta & Preferências</h3>
+            
+            <button 
+              onClick={handleNotificationToggle}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${permission === 'granted' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
+                  {permission === 'granted' ? <Bell size={18} /> : <BellOff size={18} />}
+                </div>
+                <div className="text-left">
+                  <span className="text-sm font-bold text-gray-700 block">Notificações</span>
+                  <span className="text-[10px] font-medium text-gray-400">
+                    {permission === 'granted' ? 'Ativadas' : permission === 'denied' ? 'Bloqueadas' : 'Toque para ativar'}
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="text-gray-300" size={18} />
+            </button>
 
           <button 
             onClick={() => onViewChange?.('FAQ_VIEW')}
@@ -133,14 +168,35 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onViewChange }) => {
             <ChevronRight className="text-gray-300" size={18} />
           </button>
 
-          <div className="pt-6">
+          <button 
+            onClick={() => onViewChange?.('PRIVACY_VIEW')}
+            className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-50 text-purple-600 p-2 rounded-lg"><Shield size={18} /></div>
+              <span className="text-sm font-bold text-gray-700">Privacidade & Termos</span>
+            </div>
+            <ChevronRight className="text-gray-300" size={18} />
+          </button>
+
+          <div className="pt-6 space-y-3">
             <button 
               onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-3 p-4 bg-rose-600 rounded-2xl shadow-lg shadow-rose-100 text-white hover:bg-rose-700 active:scale-95 transition-all"
+              className="w-full flex items-center justify-center gap-3 p-4 bg-white border border-gray-200 rounded-2xl shadow-sm text-gray-700 hover:bg-gray-50 active:scale-95 transition-all"
             >
               <LogOut size={20} />
-              <span className="font-black text-sm uppercase tracking-wider">Sair da Minha Conta</span>
+              <span className="font-black text-sm uppercase tracking-wider">Sair da Conta</span>
             </button>
+
+            <button 
+              onClick={handleDeleteAccount}
+              disabled={isDeleting}
+              className="w-full flex items-center justify-center gap-2 p-3 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors opacity-60 hover:opacity-100"
+            >
+              {isDeleting ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
+              <span className="font-bold text-xs uppercase tracking-wider">Excluir Minha Conta</span>
+            </button>
+
             <p className="text-center text-[10px] text-gray-400 font-bold mt-4 uppercase tracking-[0.2em]">Versão 1.0.5 - Cloud</p>
           </div>
         </div>
