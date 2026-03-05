@@ -15,6 +15,7 @@ import FAQScreen from './components/FAQScreen';
 import MessagesListScreen from './components/MessagesListScreen';
 import ChatScreen from './components/ChatScreen';
 import PrivacyScreen from './components/PrivacyScreen';
+import InstallPrompt from './components/InstallPrompt';
 import { SplashScreen } from './components/SplashScreen';
 import { ViewType, AuthUser, Store } from './types';
 import { getAuthUser, getStoreById, trackVisit, getOrCreateChat } from './constants';
@@ -179,6 +180,7 @@ const App: React.FC = () => {
             </motion.div>
           </AnimatePresence>
         </Layout>
+        <InstallPrompt />
       </div>
     </div>
   );
