@@ -19,15 +19,15 @@ const InstallPrompt: React.FC = () => {
     
     if (isIosDevice && !isStandalone) {
       // Show prompt after a delay on iOS
-      const timer = setTimeout(() => setShowPrompt(true), 3000);
-      return () => clearTimeout(timer);
+      // const timer = setTimeout(() => setShowPrompt(true), 3000);
+      // return () => clearTimeout(timer);
     }
 
     // Handle Android/Desktop installation prompt
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowPrompt(true);
+      // setShowPrompt(true);
     };
 
     // Listen for manual trigger from ProfileScreen

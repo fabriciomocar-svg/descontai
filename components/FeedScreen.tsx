@@ -24,18 +24,9 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
   const [activePromoId, setActivePromoId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
-  const [showInstallFab, setShowInstallFab] = useState(false);
   const observerTarget = React.useRef<HTMLDivElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const user = getAuthUser();
-
-  useEffect(() => {
-    // Check if app is installed
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-    if (!isStandalone) {
-      setShowInstallFab(true);
-    }
-  }, []);
 
   useEffect(() => {
     logScreenView('Feed');
@@ -315,16 +306,6 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
       )}
       
       <div className="h-[1px]" />
-
-      {/* Floating Install Button */}
-      {showInstallFab && (
-        <button
-          onClick={() => window.dispatchEvent(new Event('show-install-prompt'))}
-          className="fixed bottom-24 right-4 z-40 bg-indigo-600 text-white p-3 rounded-full shadow-lg shadow-indigo-200 active:scale-90 transition-transform animate-in fade-in slide-in-from-bottom-4 duration-500"
-        >
-          <Download size={24} />
-        </button>
-      )}
     </div>
   );
 };

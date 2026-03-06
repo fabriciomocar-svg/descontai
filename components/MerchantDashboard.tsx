@@ -7,7 +7,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { Promotion, ViewType, Store, Chat } from '../types';
 import { usePromotions } from '../hooks/usePromotions';
-import { compressImage } from '../utils/imageCompression';
+import { compressImage, validateVideo } from '../utils/imageCompression';
 
 interface MerchantDashboardProps {
   onViewChange?: (view: ViewType) => void;
@@ -111,17 +111,27 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
     }, { views: 0, likes: 0, saves: 0 });
   }, [merchantPromos]);
 
-  const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validação de Tamanho
       const isVideo = file.type.startsWith('video/');
-      const maxSize = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024; // 50MB video, 5MB image
       
-      if (file.size > maxSize) {
-        alert(`⚠️ O arquivo é muito grande.\nLimite para ${isVideo ? 'vídeos' : 'imagens'}: ${maxSize / (1024 * 1024)}MB.`);
-        e.target.value = ''; // Limpar input
-        return;
+      if (isVideo) {
+        try {
+          await validateVideo(file);
+        } catch (err: any) {
+          alert(`⚠️ ${err.message}`);
+          e.target.value = ''; // Limpar input
+          return;
+        }
+      } else {
+        // Validação básica para imagem (limite de entrada antes da compressão)
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+          alert(`⚠️ A imagem é muito grande (${(file.size / (1024 * 1024)).toFixed(1)}MB). O limite para upload é 10MB.`);
+          e.target.value = '';
+          return;
+        }
       }
 
       setMediaFile(file);
@@ -154,11 +164,8 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
         // Comprimir se for imagem
         if (mediaType === 'image') {
           try {
-            fileToUpload = await compressImage(mediaFile, {
-              maxWidth: 1280,
-              maxHeight: 1280,
-              quality: 0.8
-            });
+            // Usa os padrões: WebP, 1080p (1920x1920 max), Qualidade 0.8
+            fileToUpload = await compressImage(mediaFile);
           } catch (e) {
             console.warn("Falha na compressão, enviando original", e);
           }
