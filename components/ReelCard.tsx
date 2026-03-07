@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Promotion } from '../types';
-import { Heart, MessageCircle, Share2, Bookmark, MapPin, MoreHorizontal, CheckCircle, X, Flag, Ban } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, MapPin, MoreHorizontal, CheckCircle, X, Flag, Ban, Volume2, VolumeX } from 'lucide-react';
 import { toggleSavePromotion, toggleLikePromotion, incrementPromotionView, getUserMetadata, getAuthUser, blockUser } from '../constants';
 import { logViewPromotion, logClickVisitStore } from '../utils/analytics';
 import ReportModal from './ReportModal';
@@ -12,15 +12,17 @@ interface ReelCardProps {
   onOpenChat?: (merchantId: string, storeName: string, promotionId?: string) => void;
   isActive?: boolean;
   distance?: number;
+  shouldPreload?: boolean;
 }
 
-const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat, isActive = false, distance }) => {
+const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat, isActive = false, distance, shouldPreload = false }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [savePop, setSavePop] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { success, error } = useToast();
 
@@ -48,9 +50,18 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
   useEffect(() => {
     if (videoRef.current) {
       if (isActive && !isFullscreen) {
-        videoRef.current.play().catch(() => {
-          console.log("Autoplay blocked");
-        });
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            console.log("Autoplay with sound blocked. Muting and retrying.");
+            // Fallback: mute and try again
+            setIsMuted(true);
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              videoRef.current.play().catch(e => console.error("Autoplay failed even when muted:", e));
+            }
+          });
+        }
       } else {
         videoRef.current.pause();
       }
@@ -197,15 +208,29 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
         onClick={() => setIsFullscreen(true)}
       >
         {promotion.videoUrl ? (
-          <video 
-            ref={videoRef}
-            src={promotion.videoUrl}
-            className="w-full h-full object-contain relative z-10"
-            loop
-            muted
-            playsInline
-            poster={promotion.imageUrl}
-          />
+          <>
+            <video 
+              ref={videoRef}
+              src={promotion.videoUrl}
+              className="w-full h-full object-contain relative z-10"
+              loop
+              muted={isMuted}
+              playsInline
+              preload={isActive || shouldPreload ? "auto" : "metadata"}
+              poster={promotion.imageUrl === 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=600&fit=crop' 
+                ? 'https://images.unsplash.com/photo-1557683316-973673baf926?w=400&h=600&fit=crop' 
+                : promotion.imageUrl}
+            />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsMuted(!isMuted);
+              }}
+              className="absolute bottom-4 right-4 z-20 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+            >
+              {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            </button>
+          </>
         ) : (
           <img 
             src={promotion.imageUrl} 

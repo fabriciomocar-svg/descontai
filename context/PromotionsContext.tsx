@@ -17,6 +17,7 @@ import { deletePromotion } from '../constants';
 
 interface StoryData {
   storeId: string;
+  promoId?: string;
   lastPromoAt: number;
 }
 
@@ -83,23 +84,28 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
         }
 
         if (isValid) {
-          validPromos.push(promo);
+          validPromos.push({ id: doc.id, ...promo });
         }
       });
 
       // Agrupar por loja e pegar a data mais recente
-      const storiesMap = new Map<string, number>();
+      const storiesMap = new Map<string, { lastPromoAt: number, promoId: string }>();
       validPromos.forEach(promo => {
-        const currentLast = storiesMap.get(promo.storeId) || 0;
+        const current = storiesMap.get(promo.storeId);
         const promoTime = (promo as any).createdAt?.seconds || 0;
-        if (promoTime > currentLast) {
-          storiesMap.set(promo.storeId, promoTime);
+        
+        if (!current || promoTime > current.lastPromoAt) {
+          storiesMap.set(promo.storeId, { lastPromoAt: promoTime, promoId: promo.id });
         }
       });
 
       // Converter para lista e ordenar: Mais recente primeiro (Esquerda -> Direita)
       const storiesList = Array.from(storiesMap.entries())
-        .map(([storeId, lastPromoAt]) => ({ storeId, lastPromoAt }))
+        .map(([storeId, data]) => ({ 
+          storeId, 
+          promoId: data.promoId,
+          lastPromoAt: data.lastPromoAt 
+        }))
         .sort((a, b) => b.lastPromoAt - a.lastPromoAt);
 
       setStories(storiesList);

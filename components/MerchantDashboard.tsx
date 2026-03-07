@@ -212,7 +212,8 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
 
       if (mediaType === 'video') {
         promoData.videoUrl = downloadUrl;
-        promoData.imageUrl = 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=600&fit=crop'; // Placeholder para vídeo
+        // Usar uma imagem de fundo neutra/abstrata em vez do placeholder antigo
+        promoData.imageUrl = 'https://images.unsplash.com/photo-1557683316-973673baf926?w=400&h=600&fit=crop'; 
       } else {
         promoData.imageUrl = downloadUrl;
       }

@@ -104,43 +104,32 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
     };
   }, [hasMore, loadingMore, loadMore]);
 
-  // Detect which card is currently active/visible
+  // Detect which card is currently active/visible using IntersectionObserver
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const handleScroll = () => {
-      const cards = container.querySelectorAll('[data-promo-id]');
-      let maxVisibility = 0;
-      let currentActiveId = null;
+    const options = {
+      root: container,
+      threshold: 0.55, // 55% visible to be considered active
+    };
 
-      cards.forEach((card) => {
-        const rect = card.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        
-        // Calculate visibility percentage
-        const intersectionHeight = Math.max(0, Math.min(rect.bottom, containerRect.bottom) - Math.max(rect.top, containerRect.top));
-        const visibility = intersectionHeight / rect.height;
-
-        if (visibility > 0.6 && visibility > maxVisibility) { // 60% visible to be active
-          maxVisibility = visibility;
-          currentActiveId = card.getAttribute('data-promo-id');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const promoId = entry.target.getAttribute('data-promo-id');
+          if (promoId) {
+            setActivePromoId(promoId);
+          }
         }
       });
+    }, options);
 
-      if (currentActiveId && currentActiveId !== activePromoId) {
-        setActivePromoId(currentActiveId);
-      }
-    };
+    const cards = container.querySelectorAll('[data-promo-id]');
+    cards.forEach((card) => observer.observe(card));
 
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    // Initial check
-    handleScroll();
-
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-    };
-  }, [sortedPromotions]); // Re-run when sortedPromotions change
+    return () => observer.disconnect();
+  }, [sortedPromotions]);
 
   useEffect(() => {
     if (!user) return;
@@ -160,29 +149,48 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
   }, [user?.id]);
 
   // Filtra as lojas que possuem stories ativos (baseado na lista completa de stories do contexto)
-  const storesWithStories = React.useMemo(() => {
-    // Se tiver stories carregados, usa eles. Senão, fallback para promotions locais (para evitar vazio inicial)
-    const sourceList = stories.length > 0 ? stories : promotions.map(p => ({ storeId: p.storeId, lastPromoAt: (p as any).createdAt?.seconds || 0 }));
+  const storiesToRender = React.useMemo(() => {
+    // Se tiver stories carregados, usa eles.
+    if (stories.length > 0) {
+      const storesMap = new Map<string, Store>(stores.map(s => [s.id, s]));
+      return stories.map(story => {
+        const store = storesMap.get(story.storeId);
+        if (!store) return null;
+        return {
+          ...store,
+          promoId: story.promoId,
+          uniqueKey: story.storeId // Chave única é o ID da loja, pois só tem uma bolinha por loja
+        };
+      }).filter(Boolean) as (Store & { promoId?: string, uniqueKey: string })[];
+    }
     
-    // Mapear IDs de lojas para objetos Store
+    // Fallback para promotions locais (para evitar vazio inicial)
     const storesMap = new Map<string, Store>(stores.map(s => [s.id, s]));
-    
-    // Criar lista única de lojas com stories
     const uniqueStoreIds = new Set<string>();
-    const result: Store[] = [];
+    const result: (Store & { promoId?: string, uniqueKey: string })[] = [];
 
-    sourceList.forEach(item => {
-      if (!uniqueStoreIds.has(item.storeId)) {
-        const store = storesMap.get(item.storeId);
+    // Ordenar promoções por data para pegar a mais recente primeiro
+    const sortedPromos = [...promotions].sort((a, b) => {
+      const timeA = (a as any).createdAt?.seconds || 0;
+      const timeB = (b as any).createdAt?.seconds || 0;
+      return timeB - timeA;
+    });
+
+    sortedPromos.forEach(p => {
+      if (!uniqueStoreIds.has(p.storeId)) {
+        const store = storesMap.get(p.storeId);
         if (store) {
-          uniqueStoreIds.add(item.storeId);
-          result.push(store);
+          uniqueStoreIds.add(p.storeId);
+          result.push({
+            ...store,
+            promoId: p.id,
+            uniqueKey: p.storeId
+          });
         }
       }
     });
-
     return result;
-  }, [stores, promotions, stores]);
+  }, [stores, promotions, stories]);
 
   const loading = promoLoading || storesLoading;
 
@@ -224,25 +232,23 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
         </div>
         
         <div className="px-4 flex gap-4 overflow-x-auto no-scrollbar pb-4 pt-3">
-          {storesWithStories.map((store) => {
-            // Encontra a promoção mais recente desta loja
-            const latestPromo = promotions.find(p => p.storeId === store.id);
-            const displayImage = store.logo;
+          {storiesToRender.map((item) => {
+            const displayImage = item.logo;
             
             const handleCircleClick = () => {
-              if (latestPromo) {
-                const element = document.getElementById(`promo-${latestPromo.id}`);
+              if (item.promoId) {
+                const element = document.getElementById(`promo-${item.promoId}`);
                 if (element) {
                   element.scrollIntoView({ behavior: 'smooth' });
                 }
               } else {
-                onStoreClick?.(store.id);
+                onStoreClick?.(item.id);
               }
             };
 
             return (
               <button 
-                key={store.id} 
+                key={item.uniqueKey} 
                 onClick={handleCircleClick}
                 className="flex flex-col items-center gap-1.5 shrink-0 animate-fade-in group"
               >
@@ -250,14 +256,14 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
                   <div className="p-0.5 bg-white rounded-full">
                     <img 
                       src={displayImage} 
-                      alt={store.name} 
+                      alt={item.name} 
                       className="w-16 h-16 rounded-full object-cover border border-gray-100"
                       referrerPolicy="no-referrer"
                     />
                   </div>
                 </div>
                 <span className="text-[9px] text-gray-800 font-bold tracking-tight w-20 text-center leading-3 line-clamp-2 h-8 flex items-center justify-center overflow-hidden">
-                  {store.name}
+                  {item.name}
                 </span>
               </button>
             );
@@ -265,12 +271,32 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
         </div>
       </div>
 
-      {sortedPromotions.map((promo) => {
+      {sortedPromotions.map((promo, index) => {
         const store = stores.find(s => s.id === promo.storeId);
         let distance: number | undefined;
         
         if (userLocation && store?.lat && store?.lng) {
           distance = calculateDistance(userLocation.lat, userLocation.lng, store.lat, store.lng);
+        }
+
+        // Determinar se deve fazer preload
+        // Faz preload se for o ativo ou os próximos 2
+        const isActive = activePromoId === promo.id;
+        let shouldPreload = false;
+        
+        if (isActive) {
+          shouldPreload = true;
+        } else if (activePromoId) {
+          const activeIndex = sortedPromotions.findIndex(p => p.id === activePromoId);
+          if (activeIndex !== -1) {
+            // Preload os próximos 2 vídeos
+            if (index > activeIndex && index <= activeIndex + 2) {
+              shouldPreload = true;
+            }
+          }
+        } else if (index < 2) {
+          // Se nenhum estiver ativo (início), preload os 2 primeiros
+          shouldPreload = true;
         }
 
         return (
@@ -283,8 +309,9 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
               promotion={promo} 
               onStoreClick={onStoreClick} 
               onOpenChat={onOpenChat} 
-              isActive={activePromoId === promo.id}
+              isActive={isActive}
               distance={distance}
+              shouldPreload={shouldPreload}
             />
           </div>
         );

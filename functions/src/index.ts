@@ -69,17 +69,10 @@ export const cleanupExpiredPromotions = functions.pubsub
         const deletePromises = chunk.map(async (doc) => {
           const data = doc.data();
           
-          // 1. Atualiza o documento para "arquivado" e remove referências de mídia
-          // Mantemos o documento para histórico do lojista (visualizações, likes, etc)
-          batch.update(doc.ref, {
-            archived: true,
-            mediaUrl: admin.firestore.FieldValue.delete(),
-            imageUrl: admin.firestore.FieldValue.delete(),
-            videoUrl: admin.firestore.FieldValue.delete(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
+          // 1. Adiciona ao batch de exclusão do Firestore (DELETA O DOCUMENTO)
+          batch.delete(doc.ref);
 
-          // 2. Tenta excluir a imagem/vídeo do Storage (se existir) para economizar espaço
+          // 2. Tenta excluir a imagem/vídeo do Storage (se existir)
           if (data.mediaUrl || data.imageUrl || data.videoUrl) {
             const urlToDelete = data.mediaUrl || data.videoUrl || data.imageUrl;
             if (urlToDelete && urlToDelete.includes('firebasestorage.googleapis.com')) {
@@ -104,7 +97,7 @@ export const cleanupExpiredPromotions = functions.pubsub
       }
 
       await Promise.all(batches);
-      console.log(`✅ Limpeza concluída! ${expiredDocs.length} promoções arquivadas e mídia removida.`);
+      console.log(`✅ Limpeza concluída! ${expiredDocs.length} promoções removidas permanentemente.`);
 
       return null;
     } catch (error) {
