@@ -1,53 +1,102 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Funções auxiliares
+
+    // --- Funções Auxiliares ---
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function isMerchant() {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MERCHANT';
+      return isAuthenticated() && getUserData().role == 'MERCHANT';
     }
 
     function isAdmin() {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
+      return isAuthenticated() && getUserData().role == 'ADMIN';
     }
 
-    // Regras para Usuários
+    // Verifica se o usuário é dono da loja (comparando ID do merchant no user com ID da loja)
+    function isStoreOwner(storeId) {
+      return isMerchant() && getUserData().merchantId == storeId;
+    }
+
+    // --- Regras por Coleção ---
+
+    // Usuários:
+    // - Leitura: O próprio usuário ou Admin
+    // - Escrita: O próprio usuário (para editar perfil, salvar/curtir) ou Admin
     match /users/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
     }
 
-    // Regras para Lojas
+    // Lojas:
+    // - Leitura: Pública
+    // - Criação: Apenas Admin
+    // - Atualização: Admin ou o Dono da Loja
+    // - Exclusão: Apenas Admin
     match /stores/{storeId} {
       allow read: if true;
       allow create: if isAdmin();
-      allow update: if isAdmin() || (isMerchant() && resource.data.ownerEmail == request.auth.token.email);
+      allow update: if isAdmin() || isStoreOwner(storeId);
       allow delete: if isAdmin();
     }
 
-    // Regras para Promoções
+    // Promoções:
+    // - Leitura: Pública
+    // - Criação: Lojista (para sua própria loja) ou Admin
+    // - Atualização/Exclusão: Lojista (dono da loja da promo) ou Admin
+    // - Incremento de views/likes/saves: Permitido para autenticados (via update com restrições de campos seria ideal, mas simplificado aqui)
     match /promotions/{promoId} {
       allow read: if true;
-      allow create: if isMerchant() && request.resource.data.storeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.merchantId;
-      allow update, delete: if isMerchant() && resource.data.storeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.merchantId;
+      allow create: if isAdmin() || (isMerchant() && request.resource.data.storeId == getUserData().merchantId);
+      allow update: if isAdmin() || (isMerchant() && resource.data.storeId == getUserData().merchantId) || isAuthenticated(); // isAuthenticated permite likes/saves
+      allow delete: if isAdmin() || (isMerchant() && resource.data.storeId == getUserData().merchantId);
     }
 
-    // Regras para Chats
-    match /chats/{chatId} {
-      allow read, write: if isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.merchantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.merchantId);
-      allow create: if isAuthenticated();
+    // Categorias:
+    // - Leitura: Pública
+    // - Escrita: Apenas Admin
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
-    
-    // Regras para Mensagens dentro de Chats
-    match /chats/{chatId}/messages/{messageId} {
-       allow read, write: if isAuthenticated(); // Simplificado, idealmente checar parent
+
+    // Denúncias (Reports):
+    // - Leitura: Apenas Admin
+    // - Criação: Qualquer usuário autenticado
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.reportedBy == request.auth.uid;
+    }
+
+    // Chats:
+    // - Um chat pertence a um User e a uma Store (Merchant)
+    match /chats/{chatId} {
+      function isChatParticipant(chatData) {
+        return isOwner(chatData.userId) || 
+               (isMerchant() && getUserData().merchantId == chatData.merchantId);
+      }
+
+      allow read: if isAuthenticated() && isChatParticipant(resource.data);
+      allow create: if isAuthenticated(); // Usuário cria chat ao enviar primeira mensagem
+      allow update: if isAuthenticated() && isChatParticipant(resource.data); // Para marcar como lido, atualizar última mensagem
+
+      // Mensagens:
+      // - Apenas participantes do chat pai podem ler/escrever
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && isChatParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data);
+        allow create: if isAuthenticated() && isChatParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data);
+      }
     }
   }
 }

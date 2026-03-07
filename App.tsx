@@ -1,37 +1,92 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import Layout from './components/Layout';
-import FeedScreen from './components/FeedScreen';
-import ExploreScreen from './components/ExploreScreen';
-import MerchantDashboard from './components/MerchantDashboard';
-import MerchantSettingsScreen from './components/MerchantSettingsScreen';
-import ProfileScreen from './components/ProfileScreen';
 import AuthScreen from './components/AuthScreen';
-import AdminDashboard from './components/AdminDashboard';
-import StoreProfileScreen from './components/StoreProfileScreen';
-import FAQManager from './components/FAQManager';
-import FAQScreen from './components/FAQScreen';
-import MessagesListScreen from './components/MessagesListScreen';
-import ChatScreen from './components/ChatScreen';
-import PrivacyScreen from './components/PrivacyScreen';
-import InstallPrompt from './components/InstallPrompt';
 import { SplashScreen } from './components/SplashScreen';
 import { ViewType, AuthUser, Store } from './types';
-import { getAuthUser, getStoreById, trackVisit, getOrCreateChat } from './constants';
+import { getAuthUser, getStoreById, trackVisit, getOrCreateChat, getPromotionById } from './constants';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { Smartphone } from 'lucide-react';
+import { Smartphone, Loader2 } from 'lucide-react';
 
 import { PromotionsProvider } from './context/PromotionsContext';
+import { ToastProvider, useToast } from './context/ToastContext';
+import { requestNotificationPermission, onMessageListener } from './services/notification';
+import InstallPrompt from './components/InstallPrompt';
 
-const App: React.FC = () => {
+// Lazy Load Components
+const FeedScreen = React.lazy(() => import('./components/FeedScreen'));
+const ExploreScreen = React.lazy(() => import('./components/ExploreScreen'));
+const MerchantDashboard = React.lazy(() => import('./components/MerchantDashboard'));
+const MerchantSettingsScreen = React.lazy(() => import('./components/MerchantSettingsScreen'));
+const ProfileScreen = React.lazy(() => import('./components/ProfileScreen'));
+const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
+const StoreProfileScreen = React.lazy(() => import('./components/StoreProfileScreen'));
+const FAQManager = React.lazy(() => import('./components/FAQManager'));
+const FAQScreen = React.lazy(() => import('./components/FAQScreen'));
+const MessagesListScreen = React.lazy(() => import('./components/MessagesListScreen'));
+const ChatScreen = React.lazy(() => import('./components/ChatScreen'));
+const PrivacyScreen = React.lazy(() => import('./components/PrivacyScreen'));
+
+const LoadingFallback = () => (
+  <div className="h-full w-full flex items-center justify-center bg-gray-50">
+    <Loader2 className="animate-spin text-indigo-600" size={32} />
+  </div>
+);
+
+const AppContent: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(getAuthUser());
   const [currentView, setCurrentView] = useState<ViewType>('AUTH');
   const [previousView, setPreviousView] = useState<ViewType>('FEED');
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
+  const [initialPromoId, setInitialPromoId] = useState<string | null>(null);
   const [activeChat, setActiveChat] = useState<{id: string, name: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { info } = useToast();
+
+  useEffect(() => {
+    // Verificar Deep Linking (URL params)
+    const checkDeepLink = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const promoId = params.get('promo');
+
+      if (promoId) {
+        console.log(`🔗 Deep link detectado para promoção: ${promoId}`);
+        try {
+          const promo = await getPromotionById(promoId);
+          if (promo) {
+            const store = await getStoreById(promo.storeId);
+            if (store) {
+              setSelectedStore(store);
+              setInitialPromoId(promoId);
+              setCurrentView('STORE_PROFILE');
+              // Limpar URL para não reabrir ao recarregar
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+          }
+        } catch (error) {
+          console.error("Erro ao processar deep link:", error);
+        }
+      }
+    };
+
+    checkDeepLink();
+  }, []);
+
+  useEffect(() => {
+    // Solicitar permissão de notificação se o usuário estiver logado
+    if (user) {
+      requestNotificationPermission();
+      
+      // Listener para mensagens em primeiro plano
+      onMessageListener().then((payload: any) => {
+        if (payload?.notification) {
+          info(`🔔 ${payload.notification.title}: ${payload.notification.body}`);
+        }
+      });
+    }
+  }, [user]);
 
   useEffect(() => {
     // Registra a visita ao carregar o app
@@ -161,6 +216,7 @@ const App: React.FC = () => {
         return selectedStore ? (
           <StoreProfileScreen 
             store={selectedStore} 
+            initialPromoId={initialPromoId}
             onBack={() => setCurrentView(previousView)} 
             onEdit={() => {
               if (user.role === 'ADMIN') setCurrentView('ADMIN_STORES');
@@ -174,28 +230,40 @@ const App: React.FC = () => {
   };
 
   return (
-    <PromotionsProvider>
-      <div className="h-full w-full bg-gray-100 flex items-center justify-center">
-        {/* Main App Container - Centered on Desktop */}
-        <div className="h-full w-full sm:max-w-[480px] bg-gray-50 overflow-hidden sm:shadow-2xl relative">
-          <Layout activeView={currentView} onViewChange={setCurrentView} user={user}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentView}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
-                className="h-full w-full"
-              >
-                {renderContent()}
-              </motion.div>
-            </AnimatePresence>
-          </Layout>
-          <InstallPrompt />
+    <>
+      <Layout activeView={currentView} onViewChange={setCurrentView} user={user}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentView}
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.2 }}
+            className="h-full w-full"
+          >
+            <Suspense fallback={<LoadingFallback />}>
+              {renderContent()}
+            </Suspense>
+          </motion.div>
+        </AnimatePresence>
+      </Layout>
+      <InstallPrompt />
+    </>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <ToastProvider>
+      <PromotionsProvider>
+        <div className="h-full w-full bg-gray-100 flex items-center justify-center">
+          {/* Main App Container - Centered on Desktop */}
+          <div className="h-full w-full sm:max-w-[480px] bg-gray-50 overflow-hidden sm:shadow-2xl relative">
+            <AppContent />
+          </div>
         </div>
-      </div>
-    </PromotionsProvider>
+      </PromotionsProvider>
+    </ToastProvider>
   );
 };
 

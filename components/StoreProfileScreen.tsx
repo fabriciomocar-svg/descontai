@@ -10,14 +10,28 @@ interface StoreProfileScreenProps {
   store: Store;
   onBack: () => void;
   onEdit?: () => void;
+  initialPromoId?: string | null;
 }
 
-const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, onEdit }) => {
+const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, onEdit, initialPromoId }) => {
   const user = getAuthUser();
   const isOwner = user?.merchantId === store.id || user?.role === 'ADMIN';
   const { promotions } = usePromotions();
   const storePromos = promotions.filter(p => p.storeId === store.id);
-  const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(null);
+  const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(() => {
+    if (initialPromoId) {
+      return storePromos.find(p => p.id === initialPromoId) || null;
+    }
+    return null;
+  });
+
+  // Atualiza o selectedPromo se as promoções mudarem (ex: carregamento assíncrono) e tivermos um initialPromoId
+  React.useEffect(() => {
+    if (initialPromoId && !selectedPromo && storePromos.length > 0) {
+      const found = storePromos.find(p => p.id === initialPromoId);
+      if (found) setSelectedPromo(found);
+    }
+  }, [initialPromoId, storePromos, selectedPromo]);
 
   const handleOpenMaps = () => {
     const query = encodeURIComponent(`${store.name} ${store.address}`);
@@ -112,14 +126,20 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
             >
               <Phone size={16} /> WHATSAPP
             </button>
-            <a 
-              href={getInstagramUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center justify-center gap-2 bg-gradient-to-tr from-yellow-500 via-rose-500 to-purple-600 text-white py-4 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all ${!store.instagram ? 'opacity-50 pointer-events-none' : ''}`}
+            <button 
+              onClick={() => {
+                const url = getInstagramUrl();
+                if (url) {
+                  window.open(url, '_blank');
+                } else if (isOwner && onEdit) {
+                  // Se for o dono e não tiver link, leva para editar
+                  onEdit();
+                }
+              }}
+              className="flex items-center justify-center gap-2 bg-gradient-to-tr from-yellow-500 via-rose-500 to-purple-600 text-white py-4 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all"
             >
               <Instagram size={16} /> INSTAGRAM
-            </a>
+            </button>
           </div>
         </div>
       </div>

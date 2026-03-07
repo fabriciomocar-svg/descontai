@@ -8,6 +8,7 @@ import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestor
 import { Promotion, ViewType, Store, Chat } from '../types';
 import { usePromotions } from '../hooks/usePromotions';
 import { compressImage, validateVideo } from '../utils/imageCompression';
+import { useToast } from '../context/ToastContext';
 
 interface MerchantDashboardProps {
   onViewChange?: (view: ViewType) => void;
@@ -18,6 +19,7 @@ interface MerchantDashboardProps {
 const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onOpenStoreProfile, onOpenMessages }) => {
   const user = getAuthUser();
   const { promotions } = usePromotions();
+  const { success, error, warning } = useToast();
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [storeData, setStoreData] = useState<Store | null>(null);
@@ -32,43 +34,6 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
-
-  // Limpeza automática de promoções expiradas
-  useEffect(() => {
-    const cleanupExpiredPromotions = async () => {
-      if (!user?.merchantId || !db) return;
-      
-      try {
-        const q = query(collection(db, 'promotions'), where('storeId', '==', user.merchantId));
-        const snapshot = await getDocs(q);
-        
-        const now = new Date();
-        now.setHours(0, 0, 0, 0); // Zerar hora para comparar apenas data
-        
-        snapshot.docs.forEach(async (doc) => {
-          const data = doc.data() as Promotion;
-          if (data.expiresAt) {
-            try {
-              const [day, month, year] = data.expiresAt.split('/').map(Number);
-              const expiryDate = new Date(year, month - 1, day);
-              expiryDate.setHours(23, 59, 59, 999); // Expira no final do dia
-              
-              if (expiryDate < now) {
-                console.log(`🗑️ Auto-excluindo promoção expirada: ${doc.id} (Venceu em: ${data.expiresAt})`);
-                await deletePromotion(doc.id);
-              }
-            } catch (e) {
-              console.warn(`Erro ao processar data da promoção ${doc.id}`, e);
-            }
-          }
-        });
-      } catch (error) {
-        console.error("Erro na verificação de validade automática:", error);
-      }
-    };
-    
-    cleanupExpiredPromotions();
-  }, [user?.merchantId]);
 
   useEffect(() => {
     const fetchStore = async () => {
@@ -120,7 +85,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
         try {
           await validateVideo(file);
         } catch (err: any) {
-          alert(`⚠️ ${err.message}`);
+          error(`⚠️ ${err.message}`);
           e.target.value = ''; // Limpar input
           return;
         }
@@ -128,7 +93,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
         // Validação básica para imagem (limite de entrada antes da compressão)
         const maxSize = 10 * 1024 * 1024; // 10MB
         if (file.size > maxSize) {
-          alert(`⚠️ A imagem é muito grande (${(file.size / (1024 * 1024)).toFixed(1)}MB). O limite para upload é 10MB.`);
+          error(`⚠️ A imagem é muito grande (${(file.size / (1024 * 1024)).toFixed(1)}MB). O limite para upload é 10MB.`);
           e.target.value = '';
           return;
         }
@@ -144,12 +109,12 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
 
   const handleCreatePromo = async () => {
     if (!formData.description || !mediaFile || !formData.expiresAt) {
-      alert("⚠️ Preencha a descrição, selecione uma imagem/vídeo e defina a validade.");
+      warning("⚠️ Preencha a descrição, selecione uma imagem/vídeo e defina a validade.");
       return;
     }
 
     if (formData.description.length > 500) {
-      alert("⚠️ A descrição deve ter no máximo 500 caracteres.");
+      warning("⚠️ A descrição deve ter no máximo 500 caracteres.");
       return;
     }
 
@@ -171,7 +136,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
           }
         }
 
-        const storageRef = ref(storage, `promotions/${Date.now()}_${fileToUpload.name}`);
+        const storageRef = ref(storage, `promotions/${user.id}/${Date.now()}_${fileToUpload.name}`);
         const uploadSnap = await uploadBytes(storageRef, fileToUpload);
         downloadUrl = await getDownloadURL(uploadSnap.ref);
       } else {
@@ -208,9 +173,9 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
       setMediaPreview(null);
       setMediaFile(null);
       setMediaType('image');
-      alert("🎉 Oferta publicada com sucesso!");
+      success("🎉 Oferta publicada com sucesso!");
     } catch (err: any) {
-      alert("Erro ao publicar: " + err.message);
+      error("Erro ao publicar: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -232,17 +197,17 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
       console.log(`Tentando excluir promoção ID: ${id}`);
       await deletePromotion(id);
       setDeleteConfirmationId(null);
-      alert("✅ Promoção excluída com sucesso!");
+      success("✅ Promoção excluída com sucesso!");
     } catch (err: any) {
       console.error("Erro detalhado ao excluir:", err);
       const debugInfo = JSON.stringify(err, Object.getOwnPropertyNames(err));
       
       if (err.code === 'permission-denied') {
-        alert(`⛔ PERMISSÃO NEGADA\n\nCódigo: ${err.code}\nDetalhes: ${err.message}`);
+        error(`⛔ PERMISSÃO NEGADA: Você não tem permissão para excluir esta promoção.`);
       } else if (err.code === 'not-found') {
-        alert(`⚠️ DOCUMENTO NÃO ENCONTRADO\n\nO ID ${id} não existe.`);
+        warning(`⚠️ DOCUMENTO NÃO ENCONTRADO: O ID ${id} não existe.`);
       } else {
-        alert(`❌ ERRO TÉCNICO:\n\n${err.message}\n\nCódigo: ${err.code}`);
+        error(`❌ ERRO TÉCNICO: ${err.message}`);
       }
     } finally {
       setLoading(false);

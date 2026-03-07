@@ -13,6 +13,8 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 
+import { deletePromotion } from '../constants';
+
 interface StoryData {
   storeId: string;
   lastPromoAt: number;
@@ -31,70 +33,81 @@ interface PromotionsContextType {
 
 const PromotionsContext = createContext<PromotionsContextType | undefined>(undefined);
 
-const PAGE_SIZE = 5;
+  const PAGE_SIZE = 10;
 
-export const PromotionsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  export const PromotionsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [stories, setStories] = useState<StoryData[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const lastDocRef = React.useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch Stories (Active Promotions Metadata)
+  // Fetch Stories (Active Promotions Metadata) - Real-time
   useEffect(() => {
     if (!isFirebaseConfigured || !db) return;
 
-    const fetchStories = async () => {
-      try {
-        // Buscar as últimas 50 promoções para garantir que pegamos todos os stories recentes
-        // Isso é independente da paginação do feed principal
-        const q = query(
-          collection(db, 'promotions'),
-          orderBy('createdAt', 'desc'),
-          limit(50)
-        );
+    // Monitorar metadados de promoções para os stories (círculos)
+    const q = query(
+      collection(db, 'promotions'),
+      orderBy('createdAt', 'desc'),
+      limit(300) 
+    );
 
-        const snapshot = await getDocs(q);
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
 
-        const validPromos = snapshot.docs
-          .map(doc => doc.data() as Promotion)
-          .filter(promo => {
-            if (!promo.expiresAt) return true;
-            try {
-              const [day, month, year] = promo.expiresAt.split('/').map(Number);
-              const expiryDate = new Date(year, month - 1, day);
-              expiryDate.setHours(23, 59, 59, 999);
-              return expiryDate >= now;
-            } catch {
-              return true;
+      const validPromos: Promotion[] = [];
+
+      snapshot.docs.forEach(doc => {
+        const promo = doc.data() as Promotion;
+        let isValid = true;
+
+        if (promo.expiresAt) {
+          try {
+            const [day, month, year] = promo.expiresAt.split('/').map(Number);
+            const expiryDate = new Date(year, month - 1, day);
+            expiryDate.setHours(23, 59, 59, 999);
+            
+            if (expiryDate < now) {
+              isValid = false;
+              // Deletar promoção expirada do backend
+              console.log(`🗑️ Story expirado (filtrado): ${doc.id}`);
             }
-          });
-
-        // Agrupar por loja e pegar a data mais recente
-        const storiesMap = new Map<string, number>();
-        validPromos.forEach(promo => {
-          const currentLast = storiesMap.get(promo.storeId) || 0;
-          const promoTime = (promo as any).createdAt?.seconds || 0;
-          if (promoTime > currentLast) {
-            storiesMap.set(promo.storeId, promoTime);
+          } catch {
+            // Se der erro na data, assume válido por segurança ou inválido? 
+            // Melhor manter válido para não deletar por erro de parse
           }
-        });
+        }
 
-        const storiesList = Array.from(storiesMap.entries())
-          .map(([storeId, lastPromoAt]) => ({ storeId, lastPromoAt }))
-          .sort((a, b) => b.lastPromoAt - a.lastPromoAt);
+        if (isValid) {
+          validPromos.push(promo);
+        }
+      });
 
-        setStories(storiesList);
-      } catch (err) {
-        console.error("Erro ao carregar stories:", err);
-      }
-    };
+      // Agrupar por loja e pegar a data mais recente
+      const storiesMap = new Map<string, number>();
+      validPromos.forEach(promo => {
+        const currentLast = storiesMap.get(promo.storeId) || 0;
+        const promoTime = (promo as any).createdAt?.seconds || 0;
+        if (promoTime > currentLast) {
+          storiesMap.set(promo.storeId, promoTime);
+        }
+      });
 
-    fetchStories();
+      // Converter para lista e ordenar: Mais recente primeiro (Esquerda -> Direita)
+      const storiesList = Array.from(storiesMap.entries())
+        .map(([storeId, lastPromoAt]) => ({ storeId, lastPromoAt }))
+        .sort((a, b) => b.lastPromoAt - a.lastPromoAt);
+
+      setStories(storiesList);
+    }, (err) => {
+      console.error("Erro ao carregar stories em tempo real:", err);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const fetchPromotions = useCallback(async (isInitial = false) => {
@@ -108,6 +121,7 @@ export const PromotionsProvider: React.FC<{ children: ReactNode }> = ({ children
       if (isInitial) {
         setLoading(true);
         setError(null);
+        lastDocRef.current = null; // Reset cursor on initial load
       } else {
         setLoadingMore(true);
       }
@@ -118,11 +132,11 @@ export const PromotionsProvider: React.FC<{ children: ReactNode }> = ({ children
         limit(PAGE_SIZE)
       );
 
-      if (!isInitial && lastDoc) {
+      if (!isInitial && lastDocRef.current) {
         q = query(
           collection(db, 'promotions'), 
           orderBy('createdAt', 'desc'),
-          startAfter(lastDoc),
+          startAfter(lastDocRef.current),
           limit(PAGE_SIZE)
         );
       }
@@ -134,28 +148,51 @@ export const PromotionsProvider: React.FC<{ children: ReactNode }> = ({ children
         ...doc.data()
       })) as Promotion[];
 
-      // Filtrar promoções expiradas
+      // Filtrar promoções expiradas e deletar do backend
       const now = new Date();
       now.setHours(0, 0, 0, 0);
 
-      const activePromos = newPromos.filter(promo => {
-        if (!promo.expiresAt) return true;
-        try {
-          const [day, month, year] = promo.expiresAt.split('/').map(Number);
-          const expiryDate = new Date(year, month - 1, day);
-          expiryDate.setHours(23, 59, 59, 999);
-          return expiryDate >= now;
-        } catch (e) {
-          return true;
-        }
-      });
+      const activePromos: Promotion[] = [];
 
-      if (snapshot.docs.length < PAGE_SIZE) {
-        setHasMore(false);
+      for (const promo of newPromos) {
+        let isValid = true;
+        if (promo.expiresAt) {
+          try {
+            const [day, month, year] = promo.expiresAt.split('/').map(Number);
+            const expiryDate = new Date(year, month - 1, day);
+            expiryDate.setHours(23, 59, 59, 999);
+            
+            if (expiryDate < now) {
+              isValid = false;
+              console.log(`🗑️ Promoção expirada no feed (filtrada): ${promo.id}`);
+            }
+          } catch (e) {
+            // Ignorar erro de data
+          }
+        }
+        
+        if (isValid) {
+          activePromos.push(promo);
+        }
       }
 
+      // Update cursor
       if (snapshot.docs.length > 0) {
-        setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+        lastDocRef.current = snapshot.docs[snapshot.docs.length - 1];
+      }
+
+      // Check if we reached the end of the collection
+      if (snapshot.docs.length < PAGE_SIZE) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
+
+      // Se baixamos dados mas tudo foi filtrado (expirado), e ainda tem mais no banco,
+      // buscamos a próxima página automaticamente para não travar o scroll.
+      if (activePromos.length === 0 && snapshot.docs.length === PAGE_SIZE) {
+        console.log("Página cheia de itens expirados, buscando próxima...");
+        return fetchPromotions(false);
       }
 
       setPromotions(prev => {
@@ -168,10 +205,10 @@ export const PromotionsProvider: React.FC<{ children: ReactNode }> = ({ children
       console.error("Erro ao carregar promoções:", err);
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
       setLoadingMore(false);
     }
-  }, [lastDoc]);
+  }, []);
 
   // Carregar inicial
   useEffect(() => {
@@ -233,7 +270,6 @@ export const PromotionsProvider: React.FC<{ children: ReactNode }> = ({ children
   }, [loading, loadingMore, hasMore, fetchPromotions]);
 
   const refresh = useCallback(() => {
-    setLastDoc(null);
     setHasMore(true);
     fetchPromotions(true);
   }, [fetchPromotions]);

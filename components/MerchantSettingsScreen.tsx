@@ -170,7 +170,7 @@ const MerchantSettingsScreen: React.FC<MerchantSettingsScreenProps> = ({ onBack 
       // Upload logo if changed
       if (logoFile && storage) {
         try {
-          const storageRef = ref(storage, `logos/${user.id}_${Date.now()}`);
+          const storageRef = ref(storage, `logos/${user.id}/${Date.now()}`);
           const uploadSnap = await withTimeout(uploadBytes(storageRef, logoFile), 5000) as any;
           logoUrl = await getDownloadURL(uploadSnap.ref);
         } catch (e) {
@@ -182,7 +182,7 @@ const MerchantSettingsScreen: React.FC<MerchantSettingsScreenProps> = ({ onBack 
       // Upload cover if changed
       if (coverFile && storage) {
         try {
-          const storageRef = ref(storage, `covers/${user.id}_${Date.now()}`);
+          const storageRef = ref(storage, `covers/${user.id}/${Date.now()}`);
           const uploadSnap = await withTimeout(uploadBytes(storageRef, coverFile), 5000) as any;
           coverUrl = await getDownloadURL(uploadSnap.ref);
         } catch (e) {

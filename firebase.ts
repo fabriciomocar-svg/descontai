@@ -1,6 +1,6 @@
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 import { getMessaging } from 'firebase/messaging';
@@ -25,7 +25,14 @@ export const isFirebaseConfigured =
   firebaseConfig.projectId !== "";
 
 export const app = isFirebaseConfigured ? initializeApp(firebaseConfig) : null;
-export const db = isFirebaseConfigured ? getFirestore(app) : null;
+
+// Inicializar Firestore com persistência offline e suporte a múltiplas abas
+export const db = isFirebaseConfigured && app ? initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+}) : null;
+
 export const auth = isFirebaseConfigured ? getAuth(app) : null;
 export const storage = isFirebaseConfigured ? getStorage(app) : null;
 export const messaging = isFirebaseConfigured ? getMessaging(app) : null;

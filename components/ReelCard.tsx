@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Promotion } from '../types';
-import { Heart, MessageCircle, Share2, Bookmark, MapPin, MoreHorizontal, CheckCircle, X } from 'lucide-react';
-import { toggleSavePromotion, toggleLikePromotion, incrementPromotionView, getUserMetadata, getAuthUser } from '../constants';
+import { Heart, MessageCircle, Share2, Bookmark, MapPin, MoreHorizontal, CheckCircle, X, Flag, Ban } from 'lucide-react';
+import { toggleSavePromotion, toggleLikePromotion, incrementPromotionView, getUserMetadata, getAuthUser, blockUser } from '../constants';
 import { logViewPromotion, logClickVisitStore } from '../utils/analytics';
+import ReportModal from './ReportModal';
+import { useToast } from '../context/ToastContext';
 
 interface ReelCardProps {
   promotion: Promotion;
@@ -17,7 +19,10 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
   const [isSaved, setIsSaved] = useState(false);
   const [savePop, setSavePop] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const { success, error } = useToast();
 
   useEffect(() => {
     const checkInteractionState = async () => {
@@ -83,16 +88,19 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
   };
 
   const handleShare = async () => {
+    const shareUrl = `${window.location.origin}?promo=${promotion.id}`;
+    const shareText = `Confira esta oferta de ${promotion.storeName}: ${promotion.description}`;
+
     try {
       if (navigator.share) {
         await navigator.share({
           title: `Oferta de ${promotion.storeName}`,
           text: promotion.description,
-          url: window.location.href,
+          url: shareUrl,
         });
       } else {
         // Fallback for browsers that don't support Web Share API
-        await navigator.clipboard.writeText(`${promotion.description}\n\nConfira em: ${window.location.href}`);
+        await navigator.clipboard.writeText(`${shareText}\n\nLink: ${shareUrl}`);
         alert('Link da promoção copiado para a área de transferência!');
       }
     } catch (error) {
@@ -100,11 +108,23 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
     }
   };
 
+  const handleBlockUser = async () => {
+    if (window.confirm(`Tem certeza que deseja bloquear ${promotion.storeName}? Você não verá mais conteúdo desta loja.`)) {
+      try {
+        await blockUser(promotion.storeId);
+        success(`Você bloqueou ${promotion.storeName}.`);
+        setShowMenu(false);
+      } catch (err: any) {
+        error("Erro ao bloquear usuário: " + err.message);
+      }
+    }
+  };
+
   return (
     <>
     <div id={`promo-${promotion.id}`} className="relative h-full w-full bg-white overflow-hidden flex flex-col shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 px-4 bg-white z-10">
+      <div className="flex items-center justify-between p-3 px-4 bg-white z-10 relative">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => onStoreClick?.(promotion.storeId)}>
           <div className="relative">
             <img 
@@ -130,7 +150,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 relative">
           <button 
             onClick={() => {
               onStoreClick?.(promotion.storeId);
@@ -140,11 +160,36 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
           >
             Visitar
           </button>
-          <button className="text-gray-400 p-1">
+          <button 
+            onClick={() => setShowMenu(!showMenu)}
+            className="text-gray-400 p-1 hover:bg-gray-100 rounded-full transition-colors"
+          >
             <MoreHorizontal size={20} />
           </button>
+
+          {/* Context Menu */}
+          {showMenu && (
+            <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in fade-in zoom-in duration-200 origin-top-right">
+              <button 
+                onClick={() => {
+                  setShowMenu(false);
+                  setShowReportModal(true);
+                }}
+                className="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
+                <Flag size={16} className="text-gray-400" /> Denunciar
+              </button>
+              <button 
+                onClick={handleBlockUser}
+                className="w-full text-left px-4 py-3 text-sm font-medium text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-gray-50"
+              >
+                <Ban size={16} /> Bloquear
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
 
       {/* Main Content Area (Video or Image) */}
       <div 
@@ -256,6 +301,13 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
         )}
       </div>
     )}
+    
+    <ReportModal 
+      isOpen={showReportModal} 
+      onClose={() => setShowReportModal(false)} 
+      contentId={promotion.id} 
+      contentType="promotion" 
+    />
     </>
   );
 };
