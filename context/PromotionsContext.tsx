@@ -221,14 +221,15 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
     fetchPromotions(true);
   }, []);
 
-  // Listener para atualizações em tempo real (apenas para novas promoções no topo)
+  // Listener para atualizações em tempo real (novas, removidas e editadas)
   useEffect(() => {
     if (!isFirebaseConfigured || !db) return;
 
+    // Aumentado o limite para 100 para garantir que deleções recentes sejam detectadas imediatamente
     const q = query(
       collection(db, 'promotions'),
       orderBy('createdAt', 'desc'),
-      limit(1)
+      limit(100)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -255,13 +256,25 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
           if (isValid) {
             setPromotions(prev => {
               if (prev.some(p => p.id === newPromo.id)) return prev;
-              return [newPromo, ...prev];
+              // Inserir mantendo a ordem (assumindo que novos vêm primeiro)
+              // Mas como o listener pega os 100 últimos, pode vir coisa antiga na carga inicial do listener
+              // O ideal é apenas adicionar se não existir. A ordem é garantida pelo sort do render ou fetch inicial.
+              // Para simplificar e garantir "tempo real" de novos posts no topo:
+              return [newPromo, ...prev].sort((a, b) => {
+                 const timeA = (a as any).createdAt?.seconds || 0;
+                 const timeB = (b as any).createdAt?.seconds || 0;
+                 return timeB - timeA;
+              });
             });
           }
         }
         
         if (change.type === 'removed') {
            setPromotions(prev => prev.filter(p => p.id !== change.doc.id));
+        }
+
+        if (change.type === 'modified') {
+          setPromotions(prev => prev.map(p => p.id === change.doc.id ? { id: change.doc.id, ...change.doc.data() } as Promotion : p));
         }
       });
     });
