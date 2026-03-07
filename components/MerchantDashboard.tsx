@@ -62,19 +62,70 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
     return () => unsubscribe();
   }, [user?.merchantId, user?.id]);
 
+  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
+  const [allMerchantPromos, setAllMerchantPromos] = useState<Promotion[]>([]);
+
+  // Fetch all promotions for this merchant (including expired/archived)
+  useEffect(() => {
+    if (!user?.merchantId) return;
+
+    const q = query(
+      collection(db, 'promotions'),
+      where('storeId', '==', user.merchantId)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const promos = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Promotion[];
+      
+      // Sort by creation date desc
+      promos.sort((a, b) => {
+        // Assuming createdAt exists, otherwise fallback
+        return (b as any).createdAt?.seconds - (a as any).createdAt?.seconds || 0;
+      });
+
+      setAllMerchantPromos(promos);
+    });
+
+    return () => unsubscribe();
+  }, [user?.merchantId]);
+
   const merchantPromos = useMemo(() => {
-    return promotions.filter(p => p.storeId === user?.merchantId);
-  }, [promotions, user?.merchantId]);
+    // Filter active vs history based on expiration date or archived flag
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    return allMerchantPromos.filter(p => {
+      if ((p as any).archived) return activeTab === 'history';
+      
+      if (p.expiresAt) {
+        try {
+          const [day, month, year] = p.expiresAt.split('/').map(Number);
+          const expiryDate = new Date(year, month - 1, day);
+          expiryDate.setHours(23, 59, 59, 999);
+          
+          const isExpired = expiryDate < now;
+          return activeTab === 'active' ? !isExpired : isExpired;
+        } catch {
+          return activeTab === 'active'; // Keep in active if date parse fails
+        }
+      }
+      return activeTab === 'active';
+    });
+  }, [allMerchantPromos, activeTab]);
 
   const stats = useMemo(() => {
-    return merchantPromos.reduce((acc, promo) => {
+    // Calculate stats from ALL promotions (active + history)
+    return allMerchantPromos.reduce((acc, promo) => {
       return {
         views: acc.views + (promo.views || 0),
         likes: acc.likes + (promo.likes || 0),
         saves: acc.saves + (promo.saves || 0)
       };
     }, { views: 0, likes: 0, saves: 0 });
-  }, [merchantPromos]);
+  }, [allMerchantPromos]);
 
   const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -305,44 +356,68 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
 
       {/* Lista de Promoções Ativas */}
       <div className="mb-8">
-        <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Minhas Ofertas Ativas</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Minhas Ofertas</h2>
+          <div className="flex bg-gray-200 rounded-lg p-1">
+            <button
+              onClick={() => setActiveTab('active')}
+              className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${activeTab === 'active' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
+            >
+              ATIVAS
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
+            >
+              HISTÓRICO
+            </button>
+          </div>
+        </div>
+
         {merchantPromos.length === 0 ? (
           <div className="text-center py-8 text-gray-400 bg-white rounded-[32px] border border-dashed border-gray-200">
-            <p className="text-xs font-bold">Nenhuma oferta ativa.</p>
+            <p className="text-xs font-bold">Nenhuma oferta {activeTab === 'active' ? 'ativa' : 'no histórico'}.</p>
           </div>
         ) : (
           <div className="space-y-4">
             {merchantPromos.map((promo) => (
-              <div key={promo.id} className="bg-white p-4 rounded-[24px] border border-gray-100 shadow-sm flex gap-4 items-center">
-                <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-gray-100">
+              <div key={promo.id} className={`bg-white p-4 rounded-[24px] border border-gray-100 shadow-sm flex gap-4 items-center ${activeTab === 'history' ? 'opacity-75 grayscale' : ''}`}>
+                <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
                   {promo.videoUrl ? (
                     <video src={promo.videoUrl} className="w-full h-full object-cover" />
-                  ) : (
+                  ) : promo.imageUrl ? (
                     <img src={promo.imageUrl} alt="Promo" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-gray-300"><ImageIcon size={24} /></div>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-900 truncate">{promo.description}</p>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase tracking-wide">
-                      {promo.discount || 'Sem desconto'}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${activeTab === 'history' ? 'bg-gray-100 text-gray-500' : 'bg-indigo-50 text-indigo-600'}`}>
+                      {activeTab === 'history' ? 'Expirada' : (promo.discount || 'Sem desconto')}
                     </span>
                     <span className="text-[10px] text-gray-400 flex items-center gap-1">
                       <Eye size={10} /> {promo.views || 0}
                     </span>
+                    <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                      <Heart size={10} /> {promo.likes || 0}
+                    </span>
                   </div>
                 </div>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    confirmDelete(promo.id);
-                  }}
-                  className="p-4 text-rose-500 hover:bg-rose-50 active:bg-rose-100 rounded-xl transition-colors relative z-10"
-                  title="Excluir oferta"
-                  aria-label="Excluir oferta"
-                >
-                  <Trash2 size={20} />
-                </button>
+                {activeTab === 'active' && (
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      confirmDelete(promo.id);
+                    }}
+                    className="p-4 text-rose-500 hover:bg-rose-50 active:bg-rose-100 rounded-xl transition-colors relative z-10"
+                    title="Excluir oferta"
+                    aria-label="Excluir oferta"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

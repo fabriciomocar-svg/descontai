@@ -69,36 +69,42 @@ export const cleanupExpiredPromotions = functions.pubsub
         const deletePromises = chunk.map(async (doc) => {
           const data = doc.data();
           
-          // 1. Adiciona ao batch de exclusão do Firestore
-          batch.delete(doc.ref);
+          // 1. Atualiza o documento para "arquivado" e remove referências de mídia
+          // Mantemos o documento para histórico do lojista (visualizações, likes, etc)
+          batch.update(doc.ref, {
+            archived: true,
+            mediaUrl: admin.firestore.FieldValue.delete(),
+            imageUrl: admin.firestore.FieldValue.delete(),
+            videoUrl: admin.firestore.FieldValue.delete(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
 
-          // 2. Tenta excluir a imagem/vídeo do Storage (se existir)
-          if (data.mediaUrl) {
-            try {
-              // Extrai o caminho do arquivo da URL (se for URL do Firebase Storage)
-              // Exemplo: .../o/promotions%2Fuser123%2Ffile.jpg?...
-              if (data.mediaUrl.includes('firebasestorage.googleapis.com')) {
-                const matches = data.mediaUrl.match(/\/o\/(.*?)\?alt=/);
+          // 2. Tenta excluir a imagem/vídeo do Storage (se existir) para economizar espaço
+          if (data.mediaUrl || data.imageUrl || data.videoUrl) {
+            const urlToDelete = data.mediaUrl || data.videoUrl || data.imageUrl;
+            if (urlToDelete && urlToDelete.includes('firebasestorage.googleapis.com')) {
+              try {
+                // Extrai o caminho do arquivo da URL
+                const matches = urlToDelete.match(/\/o\/(.*?)\?alt=/);
                 if (matches && matches[1]) {
                   const filePath = decodeURIComponent(matches[1]);
                   await storage.file(filePath).delete();
                   console.log(`🖼️ Mídia removida: ${filePath}`);
                 }
+              } catch (storageError) {
+                console.warn(`⚠️ Falha ao excluir mídia da promoção ${doc.id}:`, storageError);
               }
-            } catch (storageError) {
-              console.warn(`⚠️ Falha ao excluir mídia da promoção ${doc.id}:`, storageError);
-              // Não interrompe o fluxo, apenas loga
             }
           }
         });
 
-        // Aguarda as operações de storage (que são async fora do batch)
+        // Aguarda as operações de storage
         await Promise.all(deletePromises);
         batches.push(batch.commit());
       }
 
       await Promise.all(batches);
-      console.log(`✅ Limpeza concluída com sucesso! ${expiredDocs.length} promoções removidas.`);
+      console.log(`✅ Limpeza concluída! ${expiredDocs.length} promoções arquivadas e mídia removida.`);
 
       return null;
     } catch (error) {
