@@ -277,6 +277,8 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
           setPromotions(prev => prev.map(p => p.id === change.doc.id ? { id: change.doc.id, ...change.doc.data() } as Promotion : p));
         }
       });
+    }, (error) => {
+      console.error("Erro no listener de promoções em tempo real:", error);
     });
 
     return () => unsubscribe();

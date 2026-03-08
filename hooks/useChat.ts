@@ -1,28 +1,20 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '../firebase';
+import { db, auth, isFirebaseConfigured } from '../firebase';
 import { Chat, ChatMessage, AuthUser } from '../types';
 import { getAuthUser } from '../constants';
 
 export const useChat = () => {
   const user = getAuthUser();
+  const isMockUser = user?.id?.startsWith('guest_') || user?.id?.startsWith('mock_') || user?.id?.startsWith('master_');
 
   const useUnreadCount = () => {
     const [unreadCount, setUnreadCount] = useState(0);
 
     useEffect(() => {
-      if (!user?.id || !isFirebaseConfigured || !db) return;
+      if (!user?.id || !isFirebaseConfigured || !db || isMockUser || !auth?.currentUser) return;
 
       const chatsCol = collection(db, 'chats');
-      // Query for chats where the user is a participant (either userId or merchantId)
-      // However, the original code specifically queried by 'userId' for regular users 
-      // and 'merchantId' for merchants in different contexts.
-      // Let's stick to the pattern seen in FeedScreen (userId) and MerchantDashboard (merchantId).
-      
-      // For general unread count, we need to know if the user is acting as a merchant or a regular user
-      // or check both if the user can be both.
-      // Based on FeedScreen, it checks 'userId'.
-      // Based on MerchantDashboard, it checks 'merchantId'.
       
       let q;
       if (user.role === 'MERCHANT' && user.merchantId) {
@@ -40,10 +32,12 @@ export const useChat = () => {
           }
         });
         setUnreadCount(count);
+      }, (error) => {
+        console.error("Error fetching unread count:", error);
       });
 
       return () => unsubscribe();
-    }, [user?.id, user?.merchantId, user?.role]);
+    }, [user?.id, user?.merchantId, user?.role, isMockUser]);
 
     return unreadCount;
   };
@@ -53,7 +47,7 @@ export const useChat = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-      if (!isFirebaseConfigured || !db || !user || !chatId) {
+      if (!isFirebaseConfigured || !db || !user || !chatId || isMockUser || !auth?.currentUser) {
         setLoading(false);
         return;
       }
@@ -68,10 +62,13 @@ export const useChat = () => {
         })) as ChatMessage[];
         setMessages(msgs);
         setLoading(false);
+      }, (error) => {
+        console.error("Error fetching messages:", error);
+        setLoading(false);
       });
 
       return () => unsubscribe();
-    }, [chatId, user?.id]);
+    }, [chatId, user?.id, isMockUser]);
 
     return { messages, loading };
   };
@@ -81,7 +78,7 @@ export const useChat = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-      if (!isFirebaseConfigured || !db || !user) {
+      if (!isFirebaseConfigured || !db || !user || isMockUser || !auth?.currentUser) {
         setLoading(false);
         return;
       }
@@ -113,10 +110,13 @@ export const useChat = () => {
 
         setChats(chatList);
         setLoading(false);
+      }, (error) => {
+        console.error("Error fetching user chats:", error);
+        setLoading(false);
       });
 
       return () => unsubscribe();
-    }, [user?.id, user?.merchantId, user?.role]);
+    }, [user?.id, user?.merchantId, user?.role, isMockUser]);
 
     return { chats, loading };
   };
@@ -125,7 +125,7 @@ export const useChat = () => {
     const [chat, setChat] = useState<Chat | null>(null);
     
     useEffect(() => {
-      if (!chatId || !db) return;
+      if (!chatId || !db || isMockUser || !auth?.currentUser) return;
       
       const fetchChat = async () => {
         try {
@@ -139,7 +139,7 @@ export const useChat = () => {
       };
       
       fetchChat();
-    }, [chatId]);
+    }, [chatId, isMockUser]);
 
     return chat;
   };

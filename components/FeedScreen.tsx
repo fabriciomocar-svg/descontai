@@ -166,7 +166,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
       <div className="h-full w-full bg-gray-50 relative flex flex-col">
         <FeedList 
           header={
-            <div className="bg-white border-b border-gray-100 flex flex-col shrink-0 snap-start min-h-[140px]">
+            <div className="bg-white border-b border-gray-100 flex flex-col shrink-0 min-h-[140px]">
               <FeedHeader onOpenMessages={onOpenMessages} unreadCount={unreadCount} />
               <StoryRail 
                 stories={storiesToRender} 

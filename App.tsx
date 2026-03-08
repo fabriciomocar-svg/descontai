@@ -38,7 +38,7 @@ const LoadingFallback = () => (
   </div>
 );
 
-const RequireAuth = ({ children }: { children: JSX.Element }) => {
+const RequireAuth = ({ children }: { children: React.ReactElement }) => {
   const user = getAuthUser();
   if (!user) return <Navigate to="/auth" replace />;
   return children;
@@ -61,6 +61,7 @@ const AppRoutes: React.FC<{ user: AuthUser | null; setUser: (user: AuthUser | nu
     <>
       <Layout user={user}>
         <AnimatePresence mode="wait" initial={false}>
+          {/* @ts-ignore - React Router v6 Routes accepts key but types don't always reflect it */}
           <Routes location={location} key={location.pathname}>
             <Route path="/auth" element={
               !user ? (

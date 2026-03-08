@@ -58,7 +58,7 @@ export const FeedList: React.FC<FeedListProps> = ({
     if (!hasMore) return <div className="h-[1px]" />;
     
     return (
-      <div className="w-full py-8 flex justify-center items-center snap-start h-24">
+      <div className="w-full py-8 flex justify-center items-center h-24">
         {loadingMore && <Loader2 className="animate-spin text-indigo-600" size={24} />}
       </div>
     );
@@ -70,7 +70,7 @@ export const FeedList: React.FC<FeedListProps> = ({
   };
 
   const EmptyPlaceholder = () => (
-    <div className="h-full w-full flex flex-col items-center justify-center text-gray-900 p-8 text-center bg-gray-50 snap-start min-h-[50vh]">
+    <div className="h-full w-full flex flex-col items-center justify-center text-gray-900 p-8 text-center bg-gray-50 min-h-[50vh]">
       <CloudLightning size={48} className="text-indigo-500 mb-4 opacity-50" />
       <h2 className="text-2xl font-black mb-2 tracking-tighter italic">CIDADE SILENCIOSA</h2>
       <p className="text-gray-500 text-sm">Nenhuma oferta ativa no momento. Seja o primeiro lojista a publicar!</p>
@@ -90,7 +90,7 @@ export const FeedList: React.FC<FeedListProps> = ({
     <Virtuoso
       ref={virtuosoRef}
       style={{ height: '100%', width: '100%' }}
-      className="snap-y snap-mandatory no-scrollbar"
+      className="no-scrollbar"
       data={promotions}
       endReached={() => {
         if (hasMore && !loadingMore) {
@@ -130,7 +130,7 @@ export const FeedList: React.FC<FeedListProps> = ({
           <div 
             id={`promo-${promo.id}`}
             data-promo-id={promo.id}
-            className="h-full snap-start mb-1"
+            className="h-full mb-1"
             style={{ height: '100dvh' }} // Full viewport height for each reel
           >
             <ReelCard 

@@ -10,6 +10,7 @@ export interface AuthUser {
   photoURL?: string;
   savedPromotions?: string[];
   likedPromotions?: string[];
+  fcmToken?: string;
 }
 
 export interface Store {
