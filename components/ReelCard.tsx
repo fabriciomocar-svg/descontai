@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Promotion } from '../types';
-import { Heart, MessageCircle, Share2, Bookmark, MapPin, MoreHorizontal, CheckCircle, X, Flag, Ban, Volume2, VolumeX } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, MapPin, MoreHorizontal, CheckCircle, X, Flag, Ban, Volume2, VolumeX, Send } from 'lucide-react';
 import { toggleSavePromotion, toggleLikePromotion, incrementPromotionView, getUserMetadata, getAuthUser, blockUser } from '../constants';
 import { logViewPromotion, logClickVisitStore } from '../utils/analytics';
 import ReportModal from './ReportModal';
+import CommentsModal from './CommentsModal';
 import { useToast } from '../context/ToastContext';
 
 interface ReelCardProps {
@@ -23,9 +24,22 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { success, error } = useToast();
+
+  useEffect(() => {
+    const handleGlobalPlay = (e: CustomEvent) => {
+      if (e.detail.id !== promotion.id && videoRef.current) {
+        videoRef.current.pause();
+      }
+    };
+    window.addEventListener('videoPlay', handleGlobalPlay as EventListener);
+    return () => window.removeEventListener('videoPlay', handleGlobalPlay as EventListener);
+  }, [promotion.id]);
 
   useEffect(() => {
     const checkInteractionState = async () => {
@@ -47,19 +61,49 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
     logViewPromotion(promotion.id, promotion.storeName);
   }, [promotion.id, promotion.storeName]);
 
-  // Handle video play/pause based on isActive prop
+  // Intersection Observer to detect when the card is in view
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          // Play video if at least 60% of the card is visible
+          setIsVisible(entry.isIntersecting && entry.intersectionRatio >= 0.6);
+        });
+      },
+      {
+        threshold: [0.6],
+      }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      if (containerRef.current) {
+        observer.unobserve(containerRef.current);
+      }
+    };
+  }, []);
+
+  // Handle video play/pause based on visibility
   useEffect(() => {
     if (videoRef.current) {
-      if (isActive && !isFullscreen) {
+      if (isVisible && !isFullscreen) {
+        // Dispatch event to pause other videos
+        window.dispatchEvent(new CustomEvent('videoPlay', { detail: { id: promotion.id } }));
+        
         const playPromise = videoRef.current.play();
         if (playPromise !== undefined) {
-          playPromise.catch(() => {
-            console.log("Autoplay with sound blocked. Muting and retrying.");
-            // Fallback: mute and try again
+          playPromise.catch((e) => {
+            if (e.name === 'AbortError') return;
+            console.log("Autoplay blocked. Muting and retrying.");
             setIsMuted(true);
             if (videoRef.current) {
               videoRef.current.muted = true;
-              videoRef.current.play().catch(e => console.error("Autoplay failed even when muted:", e));
+              videoRef.current.play().catch(err => {
+                if (err.name !== 'AbortError') console.error("Autoplay failed even when muted:", err);
+              });
             }
           });
         }
@@ -67,7 +111,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
         videoRef.current.pause();
       }
     }
-  }, [isActive, isFullscreen]);
+  }, [isVisible, isFullscreen, promotion.id]);
 
   const handleSave = async () => {
     const newState = !isSaved;
@@ -134,7 +178,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
 
   return (
     <>
-    <div id={`promo-${promotion.id}`} className="relative h-full w-full bg-white overflow-hidden flex flex-col shadow-sm">
+    <div ref={containerRef} id={`promo-${promotion.id}`} className="relative w-full bg-white flex flex-col shadow-sm border-b border-gray-100 mb-2">
       {/* Header */}
       <div className="flex items-center justify-between p-3 px-4 bg-white z-10 relative">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => onStoreClick?.(promotion.storeId)}>
@@ -206,7 +250,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
 
       {/* Main Content Area (Video or Image) */}
       <div 
-        className="flex-1 relative bg-gray-50 overflow-hidden flex items-center justify-center group cursor-pointer"
+        className="relative w-full aspect-[4/5] bg-black overflow-hidden flex items-center justify-center group cursor-pointer"
         onClick={() => !disableFullscreen && setIsFullscreen(true)}
       >
         {promotion.videoUrl ? (
@@ -219,9 +263,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
               muted={isMuted}
               playsInline
               preload={isActive || shouldPreload ? "auto" : "metadata"}
-              poster={promotion.imageUrl === 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=600&fit=crop' 
-                ? 'https://images.unsplash.com/photo-1557683316-973673baf926?w=400&h=600&fit=crop' 
-                : promotion.imageUrl}
+              poster={promotion.imageUrl}
             />
             <button
               onClick={(e) => {
@@ -256,11 +298,19 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
               <Heart size={26} fill={isLiked ? 'currentColor' : 'none'} strokeWidth={isLiked ? 0 : 2} />
             </button>
             <button 
-              onClick={() => onOpenChat?.(promotion.storeId, promotion.storeName, promotion.id)}
-              className="p-2 text-gray-900 hover:text-gray-600 transition-transform active:scale-90"
-              aria-label="Mensagem"
+              onClick={() => setShowCommentsModal(true)}
+              className="p-2 text-gray-900 hover:text-gray-600 transition-transform active:scale-90 flex items-center gap-1"
+              aria-label="Comentários"
             >
               <MessageCircle size={26} />
+              {promotion.commentsCount ? <span className="text-xs font-bold">{promotion.commentsCount}</span> : null}
+            </button>
+            <button 
+              onClick={() => onOpenChat?.(promotion.storeId, promotion.storeName, promotion.id)}
+              className="p-2 text-gray-900 hover:text-gray-600 transition-transform active:scale-90"
+              aria-label="Mensagem Direta"
+            >
+              <Send size={24} />
             </button>
             <button 
               onClick={handleShare}
@@ -285,10 +335,27 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
         </div>
 
         {/* Description */}
-        <div className="text-sm text-gray-800 leading-snug mb-2 line-clamp-2 px-2">
+        <div className="text-sm text-gray-800 leading-snug mb-1 line-clamp-2 px-2">
           <span className="font-black mr-1.5">{promotion.storeName}</span>
           {promotion.description}
         </div>
+
+        {/* View Comments Link */}
+        {promotion.commentsCount ? (
+          <button 
+            onClick={() => setShowCommentsModal(true)}
+            className="text-xs text-gray-500 font-medium px-2 mb-2 hover:text-gray-700 text-left"
+          >
+            Ver todos os {promotion.commentsCount} comentários
+          </button>
+        ) : (
+          <button 
+            onClick={() => setShowCommentsModal(true)}
+            className="text-xs text-gray-500 font-medium px-2 mb-2 hover:text-gray-700 text-left"
+          >
+            Adicionar um comentário...
+          </button>
+        )}
 
         {/* Tags/Expiry */}
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 px-2">
@@ -340,6 +407,11 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
       onClose={() => setShowReportModal(false)} 
       contentId={promotion.id} 
       contentType="promotion" 
+    />
+    <CommentsModal
+      isOpen={showCommentsModal}
+      onClose={() => setShowCommentsModal(false)}
+      promotionId={promotion.id}
     />
     </>
   );

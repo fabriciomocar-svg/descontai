@@ -43,6 +43,7 @@ export interface Promotion {
   discount: string;
   expiresAt: string;
   likes: number;
+  commentsCount?: number;
   saves?: number;
   views?: number;
   saved: boolean;

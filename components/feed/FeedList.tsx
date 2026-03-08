@@ -130,8 +130,7 @@ export const FeedList: React.FC<FeedListProps> = ({
           <div 
             id={`promo-${promo.id}`}
             data-promo-id={promo.id}
-            className="h-full mb-1"
-            style={{ height: '100dvh' }} // Full viewport height for each reel
+            className="w-full"
           >
             <ReelCard 
               promotion={promo} 
