@@ -1,51 +1,50 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Send, Loader2 } from 'lucide-react';
 import { getAuthUser, sendMessage, markChatAsRead } from '../constants';
-import { db, isFirebaseConfigured } from '../firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { useChat } from '../hooks/useChat';
 import { ChatMessage } from '../types';
 
-interface ChatScreenProps {
-  chatId: string;
-  recipientName: string;
-  onBack: () => void;
-}
-
-const ChatScreen: React.FC<ChatScreenProps> = ({ chatId, recipientName, onBack }) => {
+const ChatScreen: React.FC = () => {
+  const { chatId } = useParams<{ chatId: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
   const user = getAuthUser();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  
+  const { useChatMessages, useChatDetails } = useChat();
+  const { messages, loading } = useChatMessages(chatId);
+  const chatDetails = useChatDetails(chatId);
+  
   const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [recipientName, setRecipientName] = useState<string>(location.state?.recipientName || '');
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isFirebaseConfigured || !db || !user) return;
-
-    const messagesCol = collection(db, 'chats', chatId, 'messages');
-    const q = query(messagesCol, orderBy('createdAt', 'asc'));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as ChatMessage[];
-      setMessages(msgs);
-      setLoading(false);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    });
-
-    return () => unsubscribe();
-  }, [chatId, user]);
+    if (chatDetails && !recipientName) {
+      if (user?.role === 'MERCHANT') {
+         setRecipientName(chatDetails.userName);
+      } else {
+         setRecipientName(chatDetails.storeName);
+      }
+    }
+  }, [chatDetails, recipientName, user]);
 
   useEffect(() => {
-    if (user && chatId) {
+    if (!loading && messages.length > 0) {
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    }
+  }, [messages, loading]);
+
+  useEffect(() => {
+    if (user && chatId && messages.length > 0) {
       markChatAsRead(chatId);
     }
   }, [messages, user, chatId]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user) return;
+    if (!newMessage.trim() || !user || !chatId) return;
 
     const text = newMessage.trim();
     setNewMessage('');
@@ -61,11 +60,11 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ chatId, recipientName, onBack }
   return (
     <div className="h-full bg-gray-50 flex flex-col relative z-[60]">
       <div className="bg-white p-4 flex items-center gap-3 border-b border-gray-100 shadow-sm sticky top-0 z-10">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+        <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
           <ChevronLeft size={24} />
         </button>
         <div>
-          <h2 className="font-black text-gray-900 text-lg leading-tight">{recipientName}</h2>
+          <h2 className="font-black text-gray-900 text-lg leading-tight">{recipientName || 'Chat'}</h2>
           <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest">Chat em tempo real</p>
         </div>
       </div>

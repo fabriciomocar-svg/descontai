@@ -30,7 +30,7 @@ export const Logo: React.FC<LogoProps> = ({ className = '', size = 'md', showTex
       {showText && (
         <h1 className={`
           ${currentSize.text} 
-          font-sans font-black tracking-tighter
+          font-logo tracking-wide
           ${light ? 'text-white' : 'text-[#0A1B2F]'}
         `}>
           Descontaí

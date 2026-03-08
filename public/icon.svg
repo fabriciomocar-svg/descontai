@@ -1,116 +1,120 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Warm Gradient: Sun-kissed Orange -> Golden Yellow -> Deep Poppy Red -->
-    <linearGradient id="warmGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFD700" /> <!-- Golden Yellow -->
-      <stop offset="50%" stop-color="#FF8C00" /> <!-- Orange -->
-      <stop offset="100%" stop-color="#FF4500" /> <!-- Poppy Red -->
+    <!-- Main Bubble Gradient (Front Face) -->
+    <linearGradient id="bubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B4A" />
+      <stop offset="100%" stop-color="#E62E7B" />
+    </linearGradient>
+
+    <!-- Bubble Side Gradient (Extrusion - Darker) -->
+    <linearGradient id="bubbleSide" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#CC4425" />
+      <stop offset="100%" stop-color="#A61250" />
+    </linearGradient>
+
+    <!-- Tag Main Gradient (Front Face) -->
+    <linearGradient id="tagGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3377FF" />
+      <stop offset="100%" stop-color="#0044CC" />
+    </linearGradient>
+
+    <!-- Tag Side Gradient (Extrusion - Darker) -->
+    <linearGradient id="tagSide" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#003399" />
+      <stop offset="100%" stop-color="#002266" />
     </linearGradient>
     
-    <!-- Glassmorphism Overlay Gradient -->
-    <linearGradient id="glassOverlay" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="white" stop-opacity="0.4" />
-      <stop offset="40%" stop-color="white" stop-opacity="0.1" />
-      <stop offset="100%" stop-color="white" stop-opacity="0.0" />
-    </linearGradient>
-
-    <!-- Deep Burgundy for Text -->
-    <solidColor id="burgundy" solid-color="#631826" />
-
-    <!-- Soft Long Shadow -->
+    <!-- Soft Shadow for the whole icon -->
     <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="10" />
-      <feOffset dx="4" dy="8" result="offsetblur" />
-      <feComponentTransfer>
-        <feFuncA type="linear" slope="0.3" />
-      </feComponentTransfer>
-      <feMerge>
-        <feMergeNode />
-        <feMergeNode in="SourceGraphic" />
-      </feMerge>
-    </filter>
-    
-    <!-- Inner Glow/Bevel for Glass effect -->
-    <filter id="innerGlow">
-      <feGaussianBlur stdDeviation="4" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="arithmetic" k2="1" k3="1" />
+      <feDropShadow dx="0" dy="20" stdDeviation="25" flood-color="#A61250" flood-opacity="0.4"/>
     </filter>
   </defs>
 
-  <!-- Clean White Rounded Square Background -->
+  <!-- Background -->
   <rect width="512" height="512" rx="110" fill="white" />
 
-  <!-- Main Speech Bubble Group -->
-  <g transform="translate(256, 256)" filter="url(#softShadow)">
-    <!-- Bubble Shape -->
-    <path d="M 0 -180 
-             C 110 -180 200 -100 200 10 
-             C 200 120 110 200 0 200 
-             C -40 200 -80 190 -110 170 
-             L -190 210 
-             L -160 130 
-             C -190 90 -200 50 -200 10 
-             C -200 -100 -110 -180 0 -180 Z" 
-          fill="url(#warmGradient)" />
+  <!-- 3D Speech Bubble Group -->
+  <g transform="translate(256, 240)" filter="url(#softShadow)">
+    
+    <!-- Bubble Extrusion (Back/Side) - Shifted down by 15px -->
+    <path d="M -170 -155 
+             H 170 
+             C 192 -155 210 -137 210 -115 
+             V 145 
+             C 210 167 192 185 170 185 
+             H 60 
+             L 0 245 
+             L -60 185 
+             H -170 
+             C -192 185 -210 167 -210 145 
+             V -115 
+             C -210 -137 -192 -155 -170 -155 
+             Z" 
+          fill="url(#bubbleSide)" />
+
+    <!-- Bubble Face (Front) -->
+    <path d="M -170 -170 
+             H 170 
+             C 192 -170 210 -152 210 -130 
+             V 130 
+             C 210 152 192 170 170 170 
+             H 60 
+             L 0 230 
+             L -60 170 
+             H -170 
+             C -192 170 -210 152 -210 130 
+             V -130 
+             C -210 -152 -192 -170 -170 -170 
+             Z" 
+          fill="url(#bubbleGrad)" />
           
-    <!-- Glassy Overlay (Top Left Highlight) -->
-    <path d="M 0 -170 
-             C 100 -170 190 -90 190 10 
-             C 190 60 170 100 140 130 
-             C 180 80 180 -20 120 -100 
-             C 50 -160 -50 -160 -120 -100
-             C -160 -60 -180 0 -180 10
-             C -180 -90 -100 -170 0 -170 Z" 
-          fill="url(#glassOverlay)" />
+    <!-- Bubble Highlight (Top Edge) -->
+    <path d="M -160 -160 H 160 C 170 -160 180 -150 180 -140 V -100" stroke="white" stroke-width="4" stroke-opacity="0.3" fill="none" stroke-linecap="round" />
+
+    <!-- 3D Discount Tag Group (Centered & Tilted) -->
+    <g transform="rotate(-8)">
+      
+      <!-- Tag Shadow on Bubble -->
+      <path d="M -110 -60 H 50 L 110 10 L 50 80 H -110 C -120 80 -130 70 -130 60 V -40 C -130 -50 -120 -60 -110 -60 Z" 
+            fill="black" fill-opacity="0.2" transform="translate(0, 10)" />
+
+      <!-- Tag Extrusion (Side) -->
+      <path d="M -110 -60 H 50 L 110 10 L 50 80 H -110 C -120 80 -130 70 -130 60 V -40 C -130 -50 -120 -60 -110 -60 Z" 
+            fill="url(#tagSide)" />
+
+      <!-- Tag Face (Front) -->
+      <path d="M -110 -70 
+               H 50 
+               L 110 0 
+               L 50 70 
+               H -110 
+               C -120 70 -130 60 -130 50 
+               V -50 
+               C -130 -60 -120 -70 -110 -70 
+               Z" 
+            fill="url(#tagGrad)" />
+            
+      <!-- Tag Highlight (Top Edge) -->
+      <path d="M -110 -60 H 45 L 95 -10" stroke="white" stroke-width="3" stroke-opacity="0.4" fill="none" stroke-linecap="round" />
+            
+      <!-- Tag Hole -->
+      <circle cx="70" cy="0" r="14" fill="#003399" />
+      <circle cx="70" cy="0" r="14" fill="black" fill-opacity="0.2" />
+      
+      <!-- Percent Symbol -->
+      <g transform="translate(-20, 0)" fill="white">
+        <!-- Shadow for text -->
+        <g transform="translate(2, 2)" fill="black" fill-opacity="0.2">
+             <circle cx="-25" cy="-25" r="14" />
+             <circle cx="25" cy="25" r="14" />
+             <rect x="-40" y="-8" width="80" height="16" rx="8" transform="rotate(-45)" />
+        </g>
+        
+        <!-- Main text -->
+        <circle cx="-25" cy="-25" r="14" />
+        <circle cx="25" cy="25" r="14" />
+        <rect x="-40" y="-8" width="80" height="16" rx="8" transform="rotate(-45)" />
+      </g>
+    </g>
   </g>
-
-  <!-- Symbol: Stylized $ with ! stroke -->
-  <g transform="translate(256, 210)">
-    <!-- The 'S' part of the Dollar Sign -->
-    <path d="M 50 -60 
-             C 100 -60 120 -30 120 10 
-             C 120 60 70 80 10 90 
-             C -50 100 -100 120 -100 170 
-             C -100 220 -60 250 10 250" 
-          fill="none" 
-          stroke="white" 
-          stroke-width="45" 
-          stroke-linecap="round"
-          stroke-opacity="0.9" />
-          
-    <path d="M -50 80 
-             C -100 80 -120 50 -120 10 
-             C -120 -40 -70 -60 -10 -70 
-             C 50 -80 100 -100 100 -150 
-             C 100 -200 60 -230 -10 -230" 
-          fill="none" 
-          stroke="white" 
-          stroke-width="45" 
-          stroke-linecap="round"
-          stroke-opacity="0.9" />
-
-    <!-- The '!' Vertical Stroke -->
-    <!-- Top part of ! -->
-    <path d="M 0 -260 L 0 120" 
-          stroke="white" 
-          stroke-width="40" 
-          stroke-linecap="round" />
-    <!-- Dot part of ! -->
-    <circle cx="0" cy="200" r="25" fill="white" />
-  </g>
-
-  <!-- Text: Descontaí -->
-  <!-- Tilted slightly upwards (-5 deg), Burgundy color, Rounded Font -->
-  <text x="256" y="420" 
-        transform="rotate(-4, 256, 420)"
-        text-anchor="middle" 
-        font-family="'Comic Sans MS', 'Chalkboard SE', 'Marker Felt', sans-serif" 
-        font-weight="bold" 
-        font-size="76" 
-        fill="#631826"
-        stroke="white"
-        stroke-width="4"
-        paint-order="stroke">
-    Descontaí
-  </text>
 </svg>

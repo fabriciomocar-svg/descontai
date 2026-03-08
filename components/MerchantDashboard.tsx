@@ -2,13 +2,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, CheckCircle, Loader2, X, Trash2, ShieldCheck, Zap, Camera, Edit3, LogOut, Film, Image as ImageIcon, Calendar, Percent, Trash, Eye, Heart, Bookmark, TrendingUp, BarChart3, Wand2, LayoutGrid, Settings, MousePointerClick, MessageCircle } from 'lucide-react';
 import { saveLocalPromotion, getAuthUser, logoutUser, getStoreById, deletePromotion } from '../constants';
-import { storage, isFirebaseConfigured, db } from '../firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
-import { Promotion, ViewType, Store, Chat } from '../types';
+import { Promotion, ViewType, Store } from '../types';
 import { usePromotions } from '../hooks/usePromotions';
-import { compressImage, validateVideo } from '../utils/imageCompression';
+import { useChat } from '../hooks/useChat';
+import { useMerchantData } from '../hooks/useMerchantData';
+import { validateVideo } from '../utils/imageCompression';
 import { useToast } from '../context/ToastContext';
+import { uploadMedia } from '../services/media';
 
 interface MerchantDashboardProps {
   onViewChange?: (view: ViewType) => void;
@@ -18,12 +18,15 @@ interface MerchantDashboardProps {
 
 const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onOpenStoreProfile, onOpenMessages }) => {
   const user = getAuthUser();
-  const { promotions } = usePromotions();
+  const { promotions } = usePromotions(); // Still used? Maybe not if we use useMerchantData
+  const { useUnreadCount } = useChat();
+  const unreadCount = useUnreadCount();
+  const { promotions: merchantPromosData, stats, loading: dataLoading } = useMerchantData();
+  
   const { success, error, warning } = useToast();
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [storeData, setStoreData] = useState<Store | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
   
   const [formData, setFormData] = useState({
     description: '',
@@ -45,59 +48,14 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
     fetchStore();
   }, [user?.merchantId]);
 
-  useEffect(() => {
-    if (!user?.merchantId) return;
-    const chatsCol = collection(db, 'chats');
-    const q = query(chatsCol, where('merchantId', '==', user.merchantId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let count = 0;
-      snapshot.docs.forEach(doc => {
-        const data = doc.data() as Chat;
-        if (data.unreadCount && data.unreadCount > 0 && data.lastSenderId !== user.id) {
-          count += data.unreadCount;
-        }
-      });
-      setUnreadCount(count);
-    });
-    return () => unsubscribe();
-  }, [user?.merchantId, user?.id]);
-
   const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
-  const [allMerchantPromos, setAllMerchantPromos] = useState<Promotion[]>([]);
-
-  // Fetch all promotions for this merchant (including expired/archived)
-  useEffect(() => {
-    if (!user?.merchantId) return;
-
-    const q = query(
-      collection(db, 'promotions'),
-      where('storeId', '==', user.merchantId)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const promos = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Promotion[];
-      
-      // Sort by creation date desc
-      promos.sort((a, b) => {
-        // Assuming createdAt exists, otherwise fallback
-        return (b as any).createdAt?.seconds - (a as any).createdAt?.seconds || 0;
-      });
-
-      setAllMerchantPromos(promos);
-    });
-
-    return () => unsubscribe();
-  }, [user?.merchantId]);
 
   const merchantPromos = useMemo(() => {
     // Filter active vs history based on expiration date or archived flag
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
-    return allMerchantPromos.filter(p => {
+    return merchantPromosData.filter(p => {
       if ((p as any).archived) return activeTab === 'history';
       
       if (p.expiresAt) {
@@ -114,18 +72,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
       }
       return activeTab === 'active';
     });
-  }, [allMerchantPromos, activeTab]);
-
-  const stats = useMemo(() => {
-    // Calculate stats from ALL promotions (active + history)
-    return allMerchantPromos.reduce((acc, promo) => {
-      return {
-        views: acc.views + (promo.views || 0),
-        likes: acc.likes + (promo.likes || 0),
-        saves: acc.saves + (promo.saves || 0)
-      };
-    }, { views: 0, likes: 0, saves: 0 });
-  }, [allMerchantPromos]);
+  }, [merchantPromosData, activeTab]);
 
   const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -173,25 +120,11 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
     try {
       let downloadUrl = mediaPreview || '';
 
-      if (isFirebaseConfigured && storage) {
-        // 1. Upload para o Firebase Storage
-        let fileToUpload = mediaFile;
-
-        // Comprimir se for imagem
-        if (mediaType === 'image') {
-          try {
-            // Usa os padrões: WebP, 1080p (1920x1920 max), Qualidade 0.8
-            fileToUpload = await compressImage(mediaFile);
-          } catch (e) {
-            console.warn("Falha na compressão, enviando original", e);
-          }
-        }
-
-        const storageRef = ref(storage, `promotions/${user.id}/${Date.now()}_${fileToUpload.name}`);
-        const uploadSnap = await uploadBytes(storageRef, fileToUpload);
-        downloadUrl = await getDownloadURL(uploadSnap.ref);
+      if (user?.id) {
+        // 1. Upload para o Firebase Storage via Service
+        downloadUrl = await uploadMedia(mediaFile, user.id, mediaType);
       } else {
-        console.warn("Firebase não configurado. Usando mídia em base64 local.");
+        console.warn("Firebase não configurado ou usuário sem ID. Usando mídia em base64 local.");
       }
 
       // 2. Salvar metadados no Firestore ou LocalStorage

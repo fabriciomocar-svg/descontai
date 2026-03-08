@@ -1,14 +1,18 @@
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ReelCard from './ReelCard';
 import { usePromotions } from '../hooks/usePromotions';
-import { getStores, getAuthUser, getUserLocation, calculateDistance } from '../constants';
+import { useChat } from '../hooks/useChat';
+import { getStores, getAuthUser, getUserLocation, getPromotionById } from '../constants';
 import { logFeedTime, logScreenView } from '../utils/analytics';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Loader2, AlertCircle, CloudLightning, MessageCircle, MapPin, Download } from 'lucide-react';
-import { Store, Chat } from '../types';
-import { Logo } from './Logo';
+import { Loader2, X } from 'lucide-react';
+import { Store, Promotion } from '../types';
+import { FeedHeader } from './feed/FeedHeader';
+import { StoryRail, StoryItem } from './feed/StoryRail';
+import { FeedList } from './feed/FeedList';
+import { FeedSkeleton } from './feed/FeedSkeleton';
+import { AnimatePresence, motion } from 'motion/react';
 
 interface FeedScreenProps {
   onStoreClick?: (storeId: string) => void;
@@ -17,15 +21,23 @@ interface FeedScreenProps {
 }
 
 const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpenMessages }) => {
-  const { promotions, stories, loading: promoLoading, loadingMore, hasMore, loadMore, isUsingMock } = usePromotions();
+  const [searchParams] = useSearchParams();
+  const initialPromoId = searchParams.get('promo');
+  
+  const { promotions, stories, loading: promoLoading, loadingMore, hasMore, loadMore } = usePromotions();
+  const { useUnreadCount } = useChat();
+  const unreadCount = useUnreadCount();
+  
   const [stores, setStores] = useState<Store[]>([]);
   const [storesLoading, setStoresLoading] = useState(true);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [activePromoId, setActivePromoId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
-  const observerTarget = React.useRef<HTMLDivElement>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
+  
+  // Story Modal State
+  const [storyModalOpen, setStoryModalOpen] = useState(false);
+  const [currentStoryPromo, setCurrentStoryPromo] = useState<Promotion | null>(null);
+  const [loadingStory, setLoadingStory] = useState(false);
+
   const user = getAuthUser();
 
   useEffect(() => {
@@ -65,88 +77,12 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
     fetchData();
   }, []);
 
-  // Sort promotions by distance if location is available
+  // Sort promotions by creation date (newest first) - As requested by user
   const sortedPromotions = React.useMemo(() => {
-    if (!userLocation || promotions.length === 0) return promotions;
-
-    return [...promotions].sort((a, b) => {
-      const storeA = stores.find(s => s.id === a.storeId);
-      const storeB = stores.find(s => s.id === b.storeId);
-
-      if (!storeA?.lat || !storeA?.lng) return 1; // Push to bottom if no location
-      if (!storeB?.lat || !storeB?.lng) return -1;
-
-      const distA = calculateDistance(userLocation.lat, userLocation.lng, storeA.lat, storeA.lng);
-      const distB = calculateDistance(userLocation.lat, userLocation.lng, storeB.lat, storeB.lng);
-
-      return distA - distB;
-    });
-  }, [promotions, userLocation, stores]);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore) {
-          loadMore();
-        }
-      },
-      { threshold: 0.5 }
-    );
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current);
-    }
-
-    return () => {
-      if (observerTarget.current) {
-        observer.unobserve(observerTarget.current);
-      }
-    };
-  }, [hasMore, loadingMore, loadMore]);
-
-  // Detect which card is currently active/visible using IntersectionObserver
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const options = {
-      root: container,
-      threshold: 0.55, // 55% visible to be considered active
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const promoId = entry.target.getAttribute('data-promo-id');
-          if (promoId) {
-            setActivePromoId(promoId);
-          }
-        }
-      });
-    }, options);
-
-    const cards = container.querySelectorAll('[data-promo-id]');
-    cards.forEach((card) => observer.observe(card));
-
-    return () => observer.disconnect();
-  }, [sortedPromotions]);
-
-  useEffect(() => {
-    if (!user) return;
-    const chatsCol = collection(db, 'chats');
-    const q = query(chatsCol, where('userId', '==', user.id));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let count = 0;
-      snapshot.docs.forEach(doc => {
-        const data = doc.data() as Chat;
-        if (data.unreadCount && data.unreadCount > 0 && data.lastSenderId !== user.id) {
-          count += data.unreadCount;
-        }
-      });
-      setUnreadCount(count);
-    });
-    return () => unsubscribe();
-  }, [user?.id]);
+    // O array 'promotions' já vem ordenado por data (desc) do contexto.
+    // Mantemos essa ordem para garantir que os posts mais recentes fiquem no topo.
+    return promotions;
+  }, [promotions]);
 
   // Filtra as lojas que possuem stories ativos (baseado na lista completa de stories do contexto)
   const storiesToRender = React.useMemo(() => {
@@ -161,13 +97,13 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
           promoId: story.promoId,
           uniqueKey: story.storeId // Chave única é o ID da loja, pois só tem uma bolinha por loja
         };
-      }).filter(Boolean) as (Store & { promoId?: string, uniqueKey: string })[];
+      }).filter(Boolean) as StoryItem[];
     }
     
     // Fallback para promotions locais (para evitar vazio inicial)
     const storesMap = new Map<string, Store>(stores.map(s => [s.id, s]));
     const uniqueStoreIds = new Set<string>();
-    const result: (Store & { promoId?: string, uniqueKey: string })[] = [];
+    const result: StoryItem[] = [];
 
     // Ordenar promoções por data para pegar a mais recente primeiro
     const sortedPromos = [...promotions].sort((a, b) => {
@@ -192,148 +128,114 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
     return result;
   }, [stores, promotions, stories]);
 
+  const handleStoryClick = async (item: any) => {
+    if (item.promoId) {
+      // Check if we already have it in the loaded promotions
+      const found = promotions.find(p => p.id === item.promoId);
+      if (found) {
+        setCurrentStoryPromo(found);
+        setStoryModalOpen(true);
+      } else {
+        // Fetch it
+        setLoadingStory(true);
+        try {
+          const fetched = await getPromotionById(item.promoId);
+          if (fetched) {
+            setCurrentStoryPromo(fetched);
+            setStoryModalOpen(true);
+          }
+        } catch (e) {
+          console.error("Failed to fetch story promo", e);
+        } finally {
+          setLoadingStory(false);
+        }
+      }
+    } else {
+      onStoreClick?.(item.id);
+    }
+  };
+
   const loading = promoLoading || storesLoading;
 
   if (loading) {
-    return (
-      <div className="h-full w-full flex flex-col items-center justify-center bg-white text-gray-900 gap-4">
-        <div className="relative">
-          <Loader2 size={48} className="animate-spin text-indigo-500" />
-        </div>
-        <p className="text-sm font-black uppercase tracking-[0.2em] animate-pulse text-center px-6 italic">
-          Conectando à Cidade...
-        </p>
-      </div>
-    );
+    return <FeedSkeleton />;
   }
 
   return (
-    <div 
-      ref={containerRef}
-      className="h-full w-full bg-gray-50 overflow-y-scroll snap-y-mandatory no-scrollbar relative"
-    >
-      <div className="bg-white border-b border-gray-100 flex flex-col shrink-0 snap-start min-h-[140px]">
-        <div className="w-full py-3 px-4 relative flex items-center justify-center">
-          <div className="absolute left-4 w-8" /> {/* Spacer */}
-          <Logo size="sm" />
-          <div className="absolute right-4 flex items-center gap-2">
-            <button 
-              onClick={onOpenMessages}
-              className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-full transition-colors relative"
-            >
-              <MessageCircle size={20} />
-              {unreadCount > 0 && (
-                <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-bounce">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </div>
-              )}
-            </button>
-          </div>
+    <>
+      <div className="h-full w-full bg-gray-50 overflow-y-scroll snap-y-mandatory no-scrollbar relative">
+        <div className="bg-white border-b border-gray-100 flex flex-col shrink-0 snap-start min-h-[140px]">
+          <FeedHeader onOpenMessages={onOpenMessages} unreadCount={unreadCount} />
+          <StoryRail 
+            stories={storiesToRender} 
+            onStoryClick={handleStoryClick}
+            loadingStory={loadingStory}
+            currentStoryPromo={currentStoryPromo}
+          />
         </div>
-        
-        <div className="px-4 flex gap-4 overflow-x-auto no-scrollbar pb-4 pt-3">
-          {storiesToRender.map((item) => {
-            const displayImage = item.logo;
-            
-            const handleCircleClick = () => {
-              if (item.promoId) {
-                const element = document.getElementById(`promo-${item.promoId}`);
-                if (element) {
-                  element.scrollIntoView({ behavior: 'smooth' });
-                }
-              } else {
-                onStoreClick?.(item.id);
-              }
-            };
 
-            return (
-              <button 
-                key={item.uniqueKey} 
-                onClick={handleCircleClick}
-                className="flex flex-col items-center gap-1.5 shrink-0 animate-fade-in group"
-              >
-                <div className="p-[2.5px] rounded-full bg-gradient-to-tr from-indigo-600 via-blue-500 to-cyan-400 shadow-sm group-active:scale-95 transition-transform duration-200 text-left">
-                  <div className="p-0.5 bg-white rounded-full">
-                    <img 
-                      src={displayImage} 
-                      alt={item.name} 
-                      className="w-16 h-16 rounded-full object-cover border border-gray-100"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                </div>
-                <span className="text-[9px] text-gray-800 font-bold tracking-tight w-20 text-center leading-3 line-clamp-2 h-8 flex items-center justify-center overflow-hidden">
-                  {item.name}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <FeedList 
+          promotions={sortedPromotions}
+          stores={stores}
+          userLocation={userLocation}
+          onStoreClick={onStoreClick}
+          onOpenChat={onOpenChat}
+          loadMore={loadMore}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          initialPromoId={initialPromoId}
+        />
       </div>
 
-      {sortedPromotions.map((promo, index) => {
-        const store = stores.find(s => s.id === promo.storeId);
-        let distance: number | undefined;
-        
-        if (userLocation && store?.lat && store?.lng) {
-          distance = calculateDistance(userLocation.lat, userLocation.lng, store.lat, store.lng);
-        }
-
-        // Determinar se deve fazer preload
-        // Faz preload se for o ativo ou os próximos 2
-        const isActive = activePromoId === promo.id;
-        let shouldPreload = false;
-        
-        if (isActive) {
-          shouldPreload = true;
-        } else if (activePromoId) {
-          const activeIndex = sortedPromotions.findIndex(p => p.id === activePromoId);
-          if (activeIndex !== -1) {
-            // Preload os próximos 2 vídeos
-            if (index > activeIndex && index <= activeIndex + 2) {
-              shouldPreload = true;
-            }
-          }
-        } else if (index < 2) {
-          // Se nenhum estiver ativo (início), preload os 2 primeiros
-          shouldPreload = true;
-        }
-
-        return (
-          <div 
-            key={promo.id} 
-            data-promo-id={promo.id}
-            className="h-full snap-start mb-1"
+      {/* Story Modal (Full Screen) */}
+      <AnimatePresence>
+        {storyModalOpen && currentStoryPromo && (
+          <motion.div 
+            initial={{ opacity: 0, y: '100%' }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 1 }}
+            onDragEnd={(e, info) => {
+              if (info.offset.y > 100 && info.velocity.y > 200) {
+                setStoryModalOpen(false);
+                setCurrentStoryPromo(null);
+              }
+            }}
+            className="fixed inset-0 z-[9999] bg-black flex flex-col"
           >
-            <ReelCard 
-              promotion={promo} 
-              onStoreClick={onStoreClick} 
-              onOpenChat={onOpenChat} 
-              isActive={isActive}
-              distance={distance}
-              shouldPreload={shouldPreload}
-            />
-          </div>
-        );
-      })}
-      
-      {promotions.length === 0 && (
-        <div className="h-full w-full flex flex-col items-center justify-center text-gray-900 p-8 text-center bg-gray-50 snap-start">
-          <CloudLightning size={48} className="text-indigo-500 mb-4 opacity-50" />
-          <h2 className="text-2xl font-black mb-2 tracking-tighter italic">CIDADE SILENCIOSA</h2>
-          <p className="text-gray-500 text-sm">Nenhuma oferta ativa no momento. Seja o primeiro lojista a publicar!</p>
-        </div>
-      )}
-
-      {/* Loading More Indicator */}
-      {hasMore && (
-        <div ref={observerTarget} className="w-full py-8 flex justify-center items-center snap-start">
-          {loadingMore && <Loader2 className="animate-spin text-indigo-600" size={24} />}
-        </div>
-      )}
-      
-      <div className="h-[1px]" />
-    </div>
+            <button 
+              onClick={() => {
+                setStoryModalOpen(false);
+                setCurrentStoryPromo(null);
+              }}
+              className="absolute top-6 right-6 z-[10000] p-3 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-black/80 transition-all shadow-lg active:scale-90"
+              aria-label="Fechar story"
+            >
+              <X size={28} />
+            </button>
+            
+            <div className="flex-1 overflow-hidden flex items-center justify-center bg-black">
+               <div className="w-full max-w-md h-full bg-white relative shadow-2xl">
+                  <ReelCard 
+                    promotion={currentStoryPromo} 
+                    onStoreClick={(id) => {
+                      setStoryModalOpen(false);
+                      onStoreClick?.(id);
+                    }}
+                    onOpenChat={onOpenChat}
+                    isActive={true} // Auto-play in modal
+                    shouldPreload={true}
+                    disableFullscreen={true}
+                  />
+               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 

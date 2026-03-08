@@ -13,9 +13,10 @@ interface ReelCardProps {
   isActive?: boolean;
   distance?: number;
   shouldPreload?: boolean;
+  disableFullscreen?: boolean;
 }
 
-const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat, isActive = false, distance, shouldPreload = false }) => {
+const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat, isActive = false, distance, shouldPreload = false, disableFullscreen = false }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [savePop, setSavePop] = useState(false);
@@ -150,8 +151,8 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
           <div>
             <h3 className="text-sm font-black text-gray-900 leading-none">{promotion.storeName}</h3>
             <div className="flex items-center gap-1 mt-0.5">
-              <MapPin size={10} className="text-gray-400" />
-              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+              <MapPin size={10} className="text-gray-600" />
+              <span className="text-[10px] font-medium text-gray-600 uppercase tracking-wide">
                 {distance !== undefined 
                   ? distance < 1 
                     ? `A ${Math.round(distance * 1000)}m` 
@@ -167,13 +168,14 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
               onStoreClick?.(promotion.storeId);
               logClickVisitStore(promotion.storeId, promotion.storeName);
             }}
-            className="px-3 py-1 bg-gray-50 hover:bg-gray-100 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-wide transition-colors"
+            className="px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-indigo-600 rounded-full text-xs font-black uppercase tracking-wide transition-colors"
           >
             Visitar
           </button>
           <button 
             onClick={() => setShowMenu(!showMenu)}
-            className="text-gray-400 p-1 hover:bg-gray-100 rounded-full transition-colors"
+            className="text-gray-600 p-3 -mr-2 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label="Mais opções"
           >
             <MoreHorizontal size={20} />
           </button>
@@ -188,7 +190,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
                 }}
                 className="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"
               >
-                <Flag size={16} className="text-gray-400" /> Denunciar
+                <Flag size={16} className="text-gray-500" /> Denunciar
               </button>
               <button 
                 onClick={handleBlockUser}
@@ -205,7 +207,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
       {/* Main Content Area (Video or Image) */}
       <div 
         className="flex-1 relative bg-gray-50 overflow-hidden flex items-center justify-center group cursor-pointer"
-        onClick={() => setIsFullscreen(true)}
+        onClick={() => !disableFullscreen && setIsFullscreen(true)}
       >
         {promotion.videoUrl ? (
           <>
@@ -226,7 +228,8 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
                 e.stopPropagation();
                 setIsMuted(!isMuted);
               }}
-              className="absolute bottom-4 right-4 z-20 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+              className="absolute bottom-4 right-4 z-20 p-3 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+              aria-label={isMuted ? "Ativar som" : "Desativar som"}
             >
               {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
             </button>
@@ -244,54 +247,58 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
       <div className="p-3 px-4 bg-white z-10">
         {/* Action Row */}
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <button 
               onClick={handleLike}
-              className={`transition-transform active:scale-90 ${isLiked ? 'text-rose-500' : 'text-gray-900 hover:text-gray-600'}`}
+              className={`p-2 transition-transform active:scale-90 ${isLiked ? 'text-rose-500' : 'text-gray-900 hover:text-gray-600'}`}
+              aria-label={isLiked ? "Descurtir" : "Curtir"}
             >
               <Heart size={26} fill={isLiked ? 'currentColor' : 'none'} strokeWidth={isLiked ? 0 : 2} />
             </button>
             <button 
               onClick={() => onOpenChat?.(promotion.storeId, promotion.storeName, promotion.id)}
-              className="text-gray-900 hover:text-gray-600 transition-transform active:scale-90"
+              className="p-2 text-gray-900 hover:text-gray-600 transition-transform active:scale-90"
+              aria-label="Mensagem"
             >
               <MessageCircle size={26} />
             </button>
             <button 
               onClick={handleShare}
-              className="text-gray-900 hover:text-gray-600 transition-transform active:scale-90"
+              className="p-2 text-gray-900 hover:text-gray-600 transition-transform active:scale-90"
+              aria-label="Compartilhar"
             >
               <Share2 size={26} />
             </button>
           </div>
           <button 
             onClick={handleSave}
-            className={`transition-transform active:scale-90 ${isSaved ? 'text-gray-900' : 'text-gray-900 hover:text-gray-600'}`}
+            className={`p-2 transition-transform active:scale-90 ${isSaved ? 'text-gray-900' : 'text-gray-900 hover:text-gray-600'}`}
+            aria-label={isSaved ? "Remover dos salvos" : "Salvar"}
           >
             <Bookmark size={26} fill={isSaved ? 'currentColor' : 'none'} />
           </button>
         </div>
 
         {/* Likes Count */}
-        <div className="font-black text-xs text-gray-900 mb-1.5">
+        <div className="font-black text-xs text-gray-900 mb-1.5 px-2">
           {promotion.likes + (isLiked ? 1 : 0)} curtidas
         </div>
 
         {/* Description */}
-        <div className="text-sm text-gray-800 leading-snug mb-2 line-clamp-2">
+        <div className="text-sm text-gray-800 leading-snug mb-2 line-clamp-2 px-2">
           <span className="font-black mr-1.5">{promotion.storeName}</span>
           {promotion.description}
         </div>
 
         {/* Tags/Expiry */}
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
+        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 px-2">
           <div className="flex items-center gap-2">
             {promotion.discount && (
               <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md uppercase tracking-wide">
                 {promotion.discount}
               </span>
             )}
-            <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">
+            <span className="text-[10px] text-gray-600 font-medium uppercase tracking-wide">
               Expira em {promotion.expiresAt}
             </span>
           </div>
@@ -304,7 +311,8 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
       <div className="fixed inset-0 z-[99999] bg-black flex items-center justify-center animate-in fade-in duration-200">
         <button 
           onClick={() => setIsFullscreen(false)}
-          className="absolute top-6 right-6 z-50 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+          className="absolute top-6 right-6 z-50 p-4 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+          aria-label="Fechar"
         >
           <X size={24} />
         </button>

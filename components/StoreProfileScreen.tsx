@@ -1,32 +1,53 @@
 
-import React, { useState } from 'react';
-import { Store, Promotion, ViewType } from '../types';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Store, Promotion } from '../types';
 import { usePromotions } from '../hooks/usePromotions';
-import { getAuthUser } from '../constants';
-import { ArrowLeft, MapPin, Phone, Instagram, Star, Clock, ChevronRight, Share2, Edit3, X } from 'lucide-react';
+import { getAuthUser, getStoreById } from '../constants';
+import { ArrowLeft, MapPin, Phone, Instagram, Star, Clock, Share2, Edit3, X, Loader2 } from 'lucide-react';
 import ReelCard from './ReelCard';
 
 interface StoreProfileScreenProps {
-  store: Store;
-  onBack: () => void;
-  onEdit?: () => void;
-  initialPromoId?: string | null;
+  store?: Store;
 }
 
-const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, onEdit, initialPromoId }) => {
+const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store: initialStore }) => {
+  const { storeId } = useParams<{ storeId: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialPromoId = searchParams.get('promo');
+  
+  const [store, setStore] = useState<Store | null>(initialStore || null);
+  const [loading, setLoading] = useState(!initialStore);
+  
   const user = getAuthUser();
-  const isOwner = user?.merchantId === store.id || user?.role === 'ADMIN';
+  const isOwner = user?.merchantId === store?.id || user?.role === 'ADMIN';
   const { promotions } = usePromotions();
-  const storePromos = promotions.filter(p => p.storeId === store.id);
-  const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(() => {
-    if (initialPromoId) {
-      return storePromos.find(p => p.id === initialPromoId) || null;
-    }
-    return null;
-  });
+  
+  const storePromos = store ? promotions.filter(p => p.storeId === store.id) : [];
+  
+  const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(null);
+
+  useEffect(() => {
+    const fetchStore = async () => {
+      if (!store && storeId) {
+        try {
+          const fetchedStore = await getStoreById(storeId);
+          setStore(fetchedStore);
+        } catch (error) {
+          console.error("Error fetching store:", error);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setLoading(false);
+      }
+    };
+    fetchStore();
+  }, [storeId, store]);
 
   // Atualiza o selectedPromo se as promoções mudarem (ex: carregamento assíncrono) e tivermos um initialPromoId
-  React.useEffect(() => {
+  useEffect(() => {
     if (initialPromoId && !selectedPromo && storePromos.length > 0) {
       const found = storePromos.find(p => p.id === initialPromoId);
       if (found) setSelectedPromo(found);
@@ -34,12 +55,13 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
   }, [initialPromoId, storePromos, selectedPromo]);
 
   const handleOpenMaps = () => {
+    if (!store) return;
     const query = encodeURIComponent(`${store.name} ${store.address}`);
     window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
   };
 
   const handleWhatsApp = () => {
-    if (store.phone) {
+    if (store?.phone) {
       window.open(`https://wa.me/${store.phone}`, '_blank');
     }
   };
@@ -60,6 +82,28 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
     return `https://instagram.com/${handle}`;
   };
 
+  if (loading) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-white">
+        <Loader2 className="animate-spin text-indigo-600" size={32} />
+      </div>
+    );
+  }
+
+  if (!store) {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center bg-white p-6 text-center">
+        <p className="text-gray-500 font-bold mb-4">Loja não encontrada</p>
+        <button 
+          onClick={() => navigate(-1)}
+          className="px-6 py-2 bg-indigo-600 text-white rounded-full text-sm font-bold"
+        >
+          Voltar
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full w-full bg-white overflow-y-auto no-scrollbar pb-24 text-left">
       {/* Top Banner & Header */}
@@ -70,7 +114,7 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
           alt="Capa"
         />
         <button 
-          onClick={onBack}
+          onClick={() => navigate(-1)}
           className="absolute top-6 left-6 p-3 bg-white/20 backdrop-blur-md rounded-full text-white border border-white/20 active:scale-90 transition-transform"
         >
           <ArrowLeft size={20} />
@@ -79,9 +123,12 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
           <Share2 size={20} />
         </button>
 
-        {isOwner && onEdit && (
+        {isOwner && (
           <button 
-            onClick={onEdit}
+            onClick={() => {
+               if (user?.role === 'ADMIN') navigate('/admin');
+               else navigate('/merchant/settings');
+            }}
             className="absolute bottom-4 right-6 px-4 py-2 bg-indigo-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all"
           >
             <Edit3 size={14} /> Editar Perfil
@@ -131,9 +178,9 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
                 const url = getInstagramUrl();
                 if (url) {
                   window.open(url, '_blank');
-                } else if (isOwner && onEdit) {
-                  // Se for o dono e não tiver link, leva para editar
-                  onEdit();
+                } else if (isOwner) {
+                   if (user?.role === 'ADMIN') navigate('/admin');
+                   else navigate('/merchant/settings');
                 }
               }}
               className="flex items-center justify-center gap-2 bg-gradient-to-tr from-yellow-500 via-rose-500 to-purple-600 text-white py-4 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all"
@@ -180,9 +227,29 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
                 className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 group cursor-pointer active:scale-95 transition-transform"
                 onClick={() => setSelectedPromo(promo)}
               >
-                <div className="aspect-[3/4] relative">
-                  <img src={promo.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  <div className="absolute top-2 left-2 bg-rose-500 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-lg">
+                <div className="aspect-[3/4] relative bg-black">
+                  {promo.videoUrl ? (
+                    <>
+                      <video 
+                        src={promo.videoUrl + "#t=0.1"} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                        muted 
+                        playsInline
+                        loop
+                        onMouseEnter={(e) => e.currentTarget.play()}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.pause();
+                          e.currentTarget.currentTime = 0;
+                        }}
+                      />
+                      <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1.5 pointer-events-none z-10">
+                        <div className="w-0 h-0 border-l-[6px] border-l-white border-y-[4px] border-y-transparent ml-0.5" />
+                      </div>
+                    </>
+                  ) : (
+                    <img src={promo.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  )}
+                  <div className="absolute top-2 left-2 bg-rose-500 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-lg z-10">
                     {promo.discount}
                   </div>
                 </div>
@@ -204,17 +271,19 @@ const StoreProfileScreen: React.FC<StoreProfileScreenProps> = ({ store, onBack, 
 
       {/* Fullscreen Promotion Modal */}
       {selectedPromo && (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[9999] bg-black flex flex-col animate-in fade-in duration-200">
           <button 
             onClick={() => setSelectedPromo(null)}
-            className="absolute top-4 right-4 z-50 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+            className="absolute top-6 right-6 z-[10000] p-3 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-black/80 transition-all shadow-lg active:scale-90"
+            aria-label="Fechar promoção"
           >
-            <X size={24} />
+            <X size={28} />
           </button>
-          <div className="flex-1 h-full w-full">
+          <div className="flex-1 h-full w-full relative">
             <ReelCard 
               promotion={selectedPromo} 
               isActive={true}
+              disableFullscreen={true}
               onStoreClick={() => setSelectedPromo(null)}
             />
           </div>

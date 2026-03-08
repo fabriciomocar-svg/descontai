@@ -124,8 +124,28 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onViewChange }) => {
           </div>
           <div className="grid grid-cols-3 gap-2">
             {savedPromos.map(promo => (
-              <div key={promo.id} className="aspect-square rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                <img src={promo.imageUrl} className="w-full h-full object-cover" alt="Oferta Salva" />
+              <div key={promo.id} className="aspect-square rounded-xl overflow-hidden shadow-sm border border-gray-100 relative group bg-black">
+                {promo.videoUrl ? (
+                  <>
+                    <video 
+                      src={promo.videoUrl + "#t=0.1"} 
+                      className="w-full h-full object-cover" 
+                      muted 
+                      playsInline
+                      loop
+                      onMouseEnter={(e) => e.currentTarget.play()}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.pause();
+                        e.currentTarget.currentTime = 0;
+                      }}
+                    />
+                    <div className="absolute top-1 right-1 bg-black/50 rounded-full p-1 pointer-events-none">
+                      <div className="w-0 h-0 border-l-[6px] border-l-white border-y-[4px] border-y-transparent ml-0.5" />
+                    </div>
+                  </>
+                ) : (
+                  <img src={promo.imageUrl} className="w-full h-full object-cover" alt="Oferta Salva" />
+                )}
               </div>
             ))}
             {savedPromos.length === 0 && (

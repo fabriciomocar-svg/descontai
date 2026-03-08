@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, MessageCircle, Loader2 } from 'lucide-react';
 import { getAuthUser, getStores, getOrCreateChat, markChatAsRead } from '../constants';
-import { db, isFirebaseConfigured } from '../firebase';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import { Chat, ViewType, Store } from '../types';
+import { useChat } from '../hooks/useChat';
+import { Store } from '../types';
 
 interface MessagesListScreenProps {
   onBack: () => void;
@@ -12,40 +11,13 @@ interface MessagesListScreenProps {
 
 const MessagesListScreen: React.FC<MessagesListScreenProps> = ({ onBack, onOpenChat }) => {
   const user = getAuthUser();
-  const [chats, setChats] = useState<Chat[]>([]);
+  const { useUserChats } = useChat();
+  const { chats, loading } = useUserChats();
   const [stores, setStores] = useState<Store[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isFirebaseConfigured || !db || !user) return;
-
-    // Fetch Chats
-    const chatsCol = collection(db, 'chats');
-    const isMerchant = user.role === 'MERCHANT';
-    const field = isMerchant ? 'merchantId' : 'userId';
-    const value = isMerchant ? user.merchantId : user.id;
-
-    const q = query(chatsCol, where(field, '==', value));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const chatList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Chat[];
-      
-      // Sort client-side
-      chatList.sort((a, b) => {
-        const timeA = a.updatedAt?.seconds || 0;
-        const timeB = b.updatedAt?.seconds || 0;
-        return timeB - timeA;
-      });
-
-      setChats(chatList);
-      setLoading(false);
-    });
-
     // Fetch Stores for "New Chat" (only for regular users)
-    if (!isMerchant) {
+    if (user && user.role !== 'MERCHANT') {
       const fetchStores = async () => {
         try {
           const allStores = await getStores();
@@ -56,8 +28,6 @@ const MessagesListScreen: React.FC<MessagesListScreenProps> = ({ onBack, onOpenC
       };
       fetchStores();
     }
-
-    return () => unsubscribe();
   }, [user]);
 
   const handleStoreClick = async (store: Store) => {
