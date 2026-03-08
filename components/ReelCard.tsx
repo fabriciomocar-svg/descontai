@@ -49,17 +49,32 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
 
   // Handle video play/pause based on isActive prop
   useEffect(() => {
+    let isMounted = true;
+
     if (videoRef.current) {
       if (isActive && !isFullscreen) {
         const playPromise = videoRef.current.play();
         if (playPromise !== undefined) {
-          playPromise.catch(() => {
-            console.log("Autoplay with sound blocked. Muting and retrying.");
-            // Fallback: mute and try again
-            setIsMuted(true);
-            if (videoRef.current) {
-              videoRef.current.muted = true;
-              videoRef.current.play().catch(e => console.error("Autoplay failed even when muted:", e));
+          playPromise.catch((error) => {
+            if (!isMounted) return;
+            
+            if (error.name === 'NotAllowedError') {
+              console.log("Autoplay with sound blocked. Muting and retrying.");
+              // Fallback: mute and try again
+              setIsMuted(true);
+              if (videoRef.current) {
+                videoRef.current.muted = true;
+                const mutedPlayPromise = videoRef.current.play();
+                if (mutedPlayPromise !== undefined) {
+                  mutedPlayPromise.catch(e => {
+                    if (!isMounted || e.name === 'AbortError') return;
+                    console.error("Autoplay failed even when muted:", e);
+                  });
+                }
+              }
+            } else if (error.name !== 'AbortError') {
+              // Ignore AbortError (media removed from document or pause() called)
+              console.error("Video play error:", error);
             }
           });
         }
@@ -67,6 +82,10 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
         videoRef.current.pause();
       }
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [isActive, isFullscreen]);
 
   const handleSave = async () => {

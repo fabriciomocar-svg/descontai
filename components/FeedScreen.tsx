@@ -163,18 +163,19 @@ const FeedScreen: React.FC<FeedScreenProps> = ({ onStoreClick, onOpenChat, onOpe
 
   return (
     <>
-      <div className="h-full w-full bg-gray-50 overflow-y-scroll snap-y-mandatory no-scrollbar relative">
-        <div className="bg-white border-b border-gray-100 flex flex-col shrink-0 snap-start min-h-[140px]">
-          <FeedHeader onOpenMessages={onOpenMessages} unreadCount={unreadCount} />
-          <StoryRail 
-            stories={storiesToRender} 
-            onStoryClick={handleStoryClick}
-            loadingStory={loadingStory}
-            currentStoryPromo={currentStoryPromo}
-          />
-        </div>
-
+      <div className="h-full w-full bg-gray-50 relative flex flex-col">
         <FeedList 
+          header={
+            <div className="bg-white border-b border-gray-100 flex flex-col shrink-0 snap-start min-h-[140px]">
+              <FeedHeader onOpenMessages={onOpenMessages} unreadCount={unreadCount} />
+              <StoryRail 
+                stories={storiesToRender} 
+                onStoryClick={handleStoryClick}
+                loadingStory={loadingStory}
+                currentStoryPromo={currentStoryPromo}
+              />
+            </div>
+          }
           promotions={sortedPromotions}
           stores={stores}
           userLocation={userLocation}

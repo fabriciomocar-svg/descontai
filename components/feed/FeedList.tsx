@@ -15,6 +15,7 @@ interface FeedListProps {
   hasMore: boolean;
   loadingMore: boolean;
   initialPromoId: string | null;
+  header?: React.ReactNode;
 }
 
 export const FeedList: React.FC<FeedListProps> = ({
@@ -26,7 +27,8 @@ export const FeedList: React.FC<FeedListProps> = ({
   loadMore,
   hasMore,
   loadingMore,
-  initialPromoId
+  initialPromoId,
+  header
 }) => {
   const [activePromoId, setActivePromoId] = useState<string | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -45,24 +47,7 @@ export const FeedList: React.FC<FeedListProps> = ({
     }
   }, [initialPromoId, promotions]);
 
-  // Handle active item change based on visibility
-  const handleItemsRendered = (items: any[]) => {
-    // This is a simplified approach. Ideally we want the most visible item.
-    // Virtuoso provides 'rangeChanged' but for snap-scrolling, usually the top item is active.
-    // However, with snap-start, the item at the top of the viewport is the one we want.
-    // We can use a custom scroll container or just rely on the fact that with snap, 
-    // the user stops at a specific item.
-    
-    // Better approach for "active" video: use rangeChanged to detect what's in view
-    // But for auto-play, we need to know exactly which one is "snapped".
-    // Let's use a simpler heuristic: the first item in the rendered range is likely the active one
-    // if we are snapping.
-  };
-
   // We need to track the active item for auto-play.
-  // Virtuoso's `rangeChanged` gives us the startIndex and endIndex.
-  // If we assume full-screen items, startIndex is likely the active one.
-  
   const handleRangeChanged = ({ startIndex }: { startIndex: number }) => {
     if (promotions[startIndex]) {
       setActivePromoId(promotions[startIndex].id);
@@ -79,6 +64,11 @@ export const FeedList: React.FC<FeedListProps> = ({
     );
   };
 
+  const Header = () => {
+    if (!header) return null;
+    return <>{header}</>;
+  };
+
   const EmptyPlaceholder = () => (
     <div className="h-full w-full flex flex-col items-center justify-center text-gray-900 p-8 text-center bg-gray-50 snap-start min-h-[50vh]">
       <CloudLightning size={48} className="text-indigo-500 mb-4 opacity-50" />
@@ -88,13 +78,19 @@ export const FeedList: React.FC<FeedListProps> = ({
   );
 
   if (promotions.length === 0) {
-    return <EmptyPlaceholder />;
+    return (
+      <div className="h-full w-full overflow-y-auto no-scrollbar">
+        {header}
+        <EmptyPlaceholder />
+      </div>
+    );
   }
 
   return (
     <Virtuoso
       ref={virtuosoRef}
       style={{ height: '100%', width: '100%' }}
+      className="snap-y snap-mandatory no-scrollbar"
       data={promotions}
       endReached={() => {
         if (hasMore && !loadingMore) {
@@ -103,6 +99,7 @@ export const FeedList: React.FC<FeedListProps> = ({
       }}
       rangeChanged={handleRangeChanged}
       components={{
+        Header: Header,
         Footer: Footer
       }}
       itemContent={(index, promo) => {
@@ -134,7 +131,7 @@ export const FeedList: React.FC<FeedListProps> = ({
             id={`promo-${promo.id}`}
             data-promo-id={promo.id}
             className="h-full snap-start mb-1"
-            style={{ height: 'calc(100vh - 140px)' }} // Adjust based on header height
+            style={{ height: '100dvh' }} // Full viewport height for each reel
           >
             <ReelCard 
               promotion={promo} 
