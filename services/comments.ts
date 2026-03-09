@@ -19,7 +19,11 @@ export const getComments = async (promotionId: string): Promise<Comment[]> => {
     const q = query(commentsCol, orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
-  } catch (e) {
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error("Erro de permissão ao buscar comentários:", e);
+      throw new Error("Você não tem permissão para ver os comentários.");
+    }
     console.error("Erro ao buscar comentários:", e);
     return [];
   }
