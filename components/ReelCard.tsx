@@ -18,8 +18,9 @@ interface ReelCardProps {
 }
 
 const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat, isActive = false, distance, shouldPreload = false, disableFullscreen = false }) => {
-  const [isLiked, setIsLiked] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
+  const [isLiked, setIsLiked] = useState<boolean | null>(null);
+  const [isSaved, setIsSaved] = useState<boolean | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [savePop, setSavePop] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -46,12 +47,11 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
       const user = getAuthUser();
       if (user) {
         const metadata = await getUserMetadata(user.id);
-        if (metadata?.savedPromotions?.includes(promotion.id)) {
-          setIsSaved(true);
-        }
-        if (metadata?.likedPromotions?.includes(promotion.id)) {
-          setIsLiked(true);
-        }
+        setIsSaved(metadata?.savedPromotions?.includes(promotion.id) || false);
+        setIsLiked(metadata?.likedPromotions?.includes(promotion.id) || false);
+      } else {
+        setIsSaved(false);
+        setIsLiked(false);
       }
     };
     checkInteractionState();
@@ -131,15 +131,21 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
   };
 
   const handleLike = async () => {
+    if (isLiked === null || isProcessing) return;
+    
+    const previousLiked = isLiked;
     const newState = !isLiked;
     setIsLiked(newState);
+    setIsProcessing(true);
     
     try {
-      await toggleLikePromotion(promotion.id, isLiked);
+      await toggleLikePromotion(promotion.id, previousLiked);
     } catch (error) {
       console.error("Failed to like promotion:", error);
       // Revert state on failure
-      setIsLiked(isLiked);
+      setIsLiked(previousLiked);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -292,7 +298,8 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
           <div className="flex items-center gap-2">
             <button 
               onClick={handleLike}
-              className={`p-2 transition-transform active:scale-90 ${isLiked ? 'text-rose-500' : 'text-gray-900 hover:text-gray-600'}`}
+              disabled={isLiked === null || isProcessing}
+              className={`p-2 transition-transform active:scale-90 ${isLiked ? 'text-rose-500' : 'text-gray-900 hover:text-gray-600'} ${isLiked === null || isProcessing ? 'opacity-50' : ''}`}
               aria-label={isLiked ? "Descurtir" : "Curtir"}
             >
               <Heart size={26} fill={isLiked ? 'currentColor' : 'none'} strokeWidth={isLiked ? 0 : 2} />
@@ -331,7 +338,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
 
         {/* Likes Count */}
         <div className="font-black text-xs text-gray-900 mb-1.5 px-2">
-          {promotion.likes + (isLiked ? 1 : 0)} curtidas
+          {promotion.likes + (isLiked === true ? 1 : 0)} curtidas
         </div>
 
         {/* Description */}
