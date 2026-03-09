@@ -31,7 +31,7 @@
   </defs>
 
   <!-- Background -->
-  <rect width="512" height="512" fill="white" />
+  <rect width="512" height="512" rx="110" fill="white" />
 
   <!-- 3D Speech Bubble Group -->
   <g transform="translate(256, 256) scale(0.8)" filter="url(#softShadow)">

@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
         tailwindcss(),
         VitePWA({
           registerType: 'autoUpdate',
-          includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+          includeAssets: ['favicon.svg', 'icon.svg'],
           manifest: {
             name: 'Descontaí - Promoções Locais',
             short_name: 'Descontaí',
