@@ -114,19 +114,25 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
   }, [isVisible, isFullscreen, promotion.id]);
 
   const handleSave = async () => {
+    if (isProcessing) return;
+    
+    const previousSaved = isSaved;
     const newState = !isSaved;
     setIsSaved(newState);
+    setIsProcessing(true);
     
     // Trigger animation
     setSavePop(true);
     setTimeout(() => setSavePop(false), 400);
 
     try {
-      await toggleSavePromotion(promotion.id, isSaved);
+      await toggleSavePromotion(promotion.id, previousSaved);
     } catch (error) {
       console.error("Failed to save promotion:", error);
       // Revert state on failure
-      setIsSaved(isSaved);
+      setIsSaved(previousSaved);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -232,7 +238,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
 
           {/* Context Menu */}
           {showMenu && (
-            <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in fade-in zoom-in duration-200 origin-top-right">
+            <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-[100] animate-in fade-in zoom-in duration-200 origin-top-right">
               <button 
                 onClick={() => {
                   setShowMenu(false);
@@ -256,7 +262,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
 
       {/* Main Content Area (Video or Image) */}
       <div 
-        className="relative w-full aspect-[4/5] bg-black overflow-hidden flex items-center justify-center group cursor-pointer"
+        className="relative w-full aspect-[4/5] bg-white overflow-hidden flex items-center justify-center group cursor-pointer"
         onClick={() => !disableFullscreen && setIsFullscreen(true)}
       >
         {promotion.videoUrl ? (

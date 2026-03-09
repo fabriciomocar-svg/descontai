@@ -41,6 +41,7 @@ export interface Promotion {
   imageUrl: string;
   description: string;
   discount: string;
+  startDate?: string;
   expiresAt: string;
   likes: number;
   commentsCount?: number;

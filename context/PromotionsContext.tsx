@@ -78,8 +78,22 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
               console.log(`🗑️ Story expirado (filtrado): ${doc.id}`);
             }
           } catch {
-            // Se der erro na data, assume válido por segurança ou inválido? 
-            // Melhor manter válido para não deletar por erro de parse
+            // Se der erro na data, assume válido por segurança
+          }
+        }
+
+        if (isValid && promo.startDate) {
+          try {
+            const [day, month, year] = promo.startDate.split('/').map(Number);
+            const startDate = new Date(year, month - 1, day);
+            startDate.setHours(0, 0, 0, 0);
+            
+            if (startDate > now) {
+              isValid = false;
+              console.log(`⏳ Story ainda não iniciado (filtrado): ${doc.id}`);
+            }
+          } catch {
+            // Se der erro na data, assume válido
           }
         }
 
@@ -176,6 +190,21 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
             // Ignorar erro de data
           }
         }
+
+        if (isValid && promo.startDate) {
+          try {
+            const [day, month, year] = promo.startDate.split('/').map(Number);
+            const startDate = new Date(year, month - 1, day);
+            startDate.setHours(0, 0, 0, 0);
+            
+            if (startDate > now) {
+              isValid = false;
+              console.log(`⏳ Promoção ainda não iniciada no feed (filtrada): ${promo.id}`);
+            }
+          } catch (e) {
+            // Ignorar erro de data
+          }
+        }
         
         if (isValid) {
           activePromos.push(promo);
@@ -248,6 +277,17 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
               const expiryDate = new Date(year, month - 1, day);
               expiryDate.setHours(23, 59, 59, 999);
               if (expiryDate < now) isValid = false;
+            } catch (e) {
+              // Ignorar erro de data
+            }
+          }
+
+          if (isValid && newPromo.startDate) {
+            try {
+              const [day, month, year] = newPromo.startDate.split('/').map(Number);
+              const startDate = new Date(year, month - 1, day);
+              startDate.setHours(0, 0, 0, 0);
+              if (startDate > now) isValid = false;
             } catch (e) {
               // Ignorar erro de data
             }

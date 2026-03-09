@@ -14,6 +14,7 @@ export interface Comment {
 
 export const getComments = async (promotionId: string): Promise<Comment[]> => {
   if (!isFirebaseConfigured || !db) return [];
+  
   try {
     const commentsCol = collection(db, 'promotions', promotionId, 'comments');
     const q = query(commentsCol, orderBy('createdAt', 'desc'));
@@ -22,7 +23,7 @@ export const getComments = async (promotionId: string): Promise<Comment[]> => {
   } catch (e: any) {
     if (e.code === 'permission-denied') {
       console.error("Erro de permissão ao buscar comentários:", e);
-      throw new Error("Você não tem permissão para ver os comentários.");
+      throw new Error("Você não tem permissão para ver os comentários. Verifique se as regras do Firestore foram aplicadas.");
     }
     console.error("Erro ao buscar comentários:", e);
     return [];
@@ -51,7 +52,7 @@ export const addComment = async (promotionId: string, text: string): Promise<Com
     await setDoc(promoRef, { commentsCount: increment(1) }, { merge: true });
 
     return { id: docRef.id, ...newComment } as Comment;
-  } catch (e) {
+  } catch (e: any) {
     console.error("Erro ao adicionar comentário:", e);
     throw e;
   }

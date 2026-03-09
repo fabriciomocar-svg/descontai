@@ -25,12 +25,14 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
   
   const { success, error, warning } = useToast();
   const [showModal, setShowModal] = useState(false);
+  const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
   const [loading, setLoading] = useState(false);
   const [storeData, setStoreData] = useState<Store | null>(null);
   
   const [formData, setFormData] = useState({
     description: '',
     discount: '',
+    startDate: new Date().toISOString().split('T')[0],
     expiresAt: ''
   });
   
@@ -48,7 +50,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
     fetchStore();
   }, [user?.merchantId]);
 
-  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
+  const [activeTab, setActiveTab] = useState<'active' | 'scheduled' | 'history'>('active');
 
   const merchantPromos = useMemo(() => {
     // Filter active vs history based on expiration date or archived flag
@@ -58,19 +60,30 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
     return merchantPromosData.filter(p => {
       if ((p as any).archived) return activeTab === 'history';
       
+      let isExpired = false;
+      let isScheduled = false;
+
       if (p.expiresAt) {
         try {
           const [day, month, year] = p.expiresAt.split('/').map(Number);
           const expiryDate = new Date(year, month - 1, day);
           expiryDate.setHours(23, 59, 59, 999);
-          
-          const isExpired = expiryDate < now;
-          return activeTab === 'active' ? !isExpired : isExpired;
-        } catch {
-          return activeTab === 'active'; // Keep in active if date parse fails
-        }
+          isExpired = expiryDate < now;
+        } catch {}
       }
-      return activeTab === 'active';
+
+      if (p.startDate) {
+        try {
+          const [day, month, year] = p.startDate.split('/').map(Number);
+          const startDate = new Date(year, month - 1, day);
+          startDate.setHours(0, 0, 0, 0);
+          isScheduled = startDate > now;
+        } catch {}
+      }
+
+      if (activeTab === 'history') return isExpired;
+      if (activeTab === 'scheduled') return isScheduled && !isExpired;
+      return !isExpired && !isScheduled;
     });
   }, [merchantPromosData, activeTab]);
 
@@ -106,7 +119,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
   };
 
   const handleCreatePromo = async () => {
-    if (!formData.description || !mediaFile || !formData.expiresAt) {
+    if (!formData.description || !mediaFile && !editingPromo || !formData.expiresAt) {
       warning("⚠️ Preencha a descrição, selecione uma imagem/vídeo e defina a validade.");
       return;
     }
@@ -118,17 +131,16 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
 
     setLoading(true);
     try {
-      let downloadUrl = mediaPreview || '';
+      let downloadUrl = mediaPreview || (editingPromo?.imageUrl || editingPromo?.videoUrl || '');
 
-      if (user?.id) {
-        // 1. Upload para o Firebase Storage via Service
+      if (mediaFile && user?.id) {
+        // Upload para o Firebase Storage via Service
         downloadUrl = await uploadMedia(mediaFile, user.id, mediaType);
-      } else {
-        console.warn("Firebase não configurado ou usuário sem ID. Usando mídia em base64 local.");
       }
 
-      // 2. Salvar metadados no Firestore ou LocalStorage
-      const [year, month, day] = formData.expiresAt.split('-');
+      // Salvar metadados no Firestore ou LocalStorage
+      const [expYear, expMonth, expDay] = formData.expiresAt.split('-');
+      const [startYear, startMonth, startDay] = formData.startDate.split('-');
       
       const promoData: any = {
         storeId: user?.merchantId || 'unknown',
@@ -136,29 +148,42 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
         storeLogo: storeData?.logo || 'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=100&h=100&fit=crop', // Fallback
         description: formData.description,
         discount: formData.discount ? `${formData.discount}% OFF` : '',
-        expiresAt: `${day}/${month}/${year}`,
-        likes: 0,
-        saves: 0,
-        views: 0,
+        startDate: `${startDay}/${startMonth}/${startYear}`,
+        expiresAt: `${expDay}/${expMonth}/${expYear}`,
+        likes: editingPromo?.likes || 0,
+        saves: editingPromo?.saves || 0,
+        views: editingPromo?.views || 0,
         saved: false
       };
 
       if (mediaType === 'video') {
         promoData.videoUrl = downloadUrl;
-        // Usar uma imagem de fundo neutra/abstrata em vez do placeholder antigo
         promoData.imageUrl = 'https://images.unsplash.com/photo-1557683316-973673baf926?w=400&h=600&fit=crop'; 
       } else {
         promoData.imageUrl = downloadUrl;
       }
 
-      await saveLocalPromotion(promoData);
+      if (editingPromo) {
+        // Update existing promotion
+        await saveLocalPromotion({ ...promoData, id: editingPromo.id });
+        success("🎉 Oferta atualizada com sucesso!");
+      } else {
+        // Create new promotion
+        await saveLocalPromotion(promoData);
+        success("🎉 Oferta publicada com sucesso!");
+      }
 
       setShowModal(false);
-      setFormData({ description: '', discount: '', expiresAt: '' });
+      setEditingPromo(null);
+      setFormData({ 
+        description: '', 
+        discount: '', 
+        startDate: new Date().toISOString().split('T')[0],
+        expiresAt: '' 
+      });
       setMediaPreview(null);
       setMediaFile(null);
       setMediaType('image');
-      success("🎉 Oferta publicada com sucesso!");
     } catch (err: any) {
       error("Erro ao publicar: " + err.message);
     } finally {
@@ -285,7 +310,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
       </div>
 
       <button onClick={() => setShowModal(true)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 shadow-xl transition-all active:scale-95 mb-8">
-        <Plus size={24} /> NOVA OFERTA CLOUD
+        <Plus size={24} /> NOVA OFERTA
       </button>
 
       {/* Lista de Promoções Ativas */}
@@ -300,6 +325,12 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
               ATIVAS
             </button>
             <button
+              onClick={() => setActiveTab('scheduled')}
+              className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${activeTab === 'scheduled' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
+            >
+              AGENDADAS
+            </button>
+            <button
               onClick={() => setActiveTab('history')}
               className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
             >
@@ -310,7 +341,9 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
 
         {merchantPromos.length === 0 ? (
           <div className="text-center py-8 text-gray-400 bg-white rounded-[32px] border border-dashed border-gray-200">
-            <p className="text-xs font-bold">Nenhuma oferta {activeTab === 'active' ? 'ativa' : 'no histórico'}.</p>
+            <p className="text-xs font-bold">
+              Nenhuma oferta {activeTab === 'active' ? 'ativa' : activeTab === 'scheduled' ? 'agendada' : 'no histórico'}.
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -328,29 +361,54 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-900 truncate">{promo.description}</p>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${activeTab === 'history' ? 'bg-gray-100 text-gray-500' : 'bg-indigo-50 text-indigo-600'}`}>
-                      {activeTab === 'history' ? 'Expirada' : (promo.discount || 'Sem desconto')}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${
+                      activeTab === 'history' ? 'bg-gray-100 text-gray-500' : 
+                      activeTab === 'scheduled' ? 'bg-amber-50 text-amber-600' :
+                      'bg-indigo-50 text-indigo-600'
+                    }`}>
+                      {activeTab === 'history' ? 'Expirada' : 
+                       activeTab === 'scheduled' ? 'Agendada' :
+                       (promo.discount || 'Sem desconto')}
                     </span>
                     <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                      <Eye size={10} /> {promo.views || 0}
-                    </span>
-                    <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                      <Heart size={10} /> {promo.likes || 0}
+                      <Calendar size={10} /> {promo.startDate} - {promo.expiresAt}
                     </span>
                   </div>
                 </div>
-                {activeTab === 'active' && (
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      confirmDelete(promo.id);
-                    }}
-                    className="p-4 text-rose-500 hover:bg-rose-50 active:bg-rose-100 rounded-xl transition-colors relative z-10"
-                    title="Excluir oferta"
-                    aria-label="Excluir oferta"
-                  >
-                    <Trash2 size={20} />
-                  </button>
+                {(activeTab === 'active' || activeTab === 'scheduled') && (
+                  <div className="flex flex-col gap-2">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingPromo(promo);
+                        setFormData({
+                          description: promo.description,
+                          discount: promo.discount.replace('% OFF', ''),
+                          startDate: promo.startDate || new Date().toISOString().split('T')[0],
+                          expiresAt: promo.expiresAt
+                        });
+                        setMediaPreview(promo.imageUrl || promo.videoUrl || null);
+                        setMediaType(promo.videoUrl ? 'video' : 'image');
+                        setShowModal(true);
+                      }}
+                      className="p-4 text-indigo-500 hover:bg-indigo-50 active:bg-indigo-100 rounded-xl transition-colors relative z-10"
+                      title="Editar oferta"
+                      aria-label="Editar oferta"
+                    >
+                      <Edit3 size={20} />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmDelete(promo.id);
+                      }}
+                      className="p-4 text-rose-500 hover:bg-rose-50 active:bg-rose-100 rounded-xl transition-colors relative z-10"
+                      title="Excluir oferta"
+                      aria-label="Excluir oferta"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -403,7 +461,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
           <div className="bg-white w-full max-w-sm rounded-[40px] p-7 relative">
             <button onClick={() => setShowModal(false)} className="absolute top-5 right-5 text-gray-400 p-2"><X size={24} /></button>
-            <h3 className="text-xl font-black italic mb-6">NOVA OFERTA</h3>
+            <h3 className="text-xl font-black italic mb-6">{editingPromo ? 'EDITAR OFERTA' : 'NOVA OFERTA'}</h3>
             
             <div className="space-y-4 mb-6">
               <div className="border-2 border-dashed rounded-[32px] p-6 flex flex-col items-center justify-center gap-2 relative min-h-[160px] overflow-hidden bg-black">
@@ -425,15 +483,27 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
                 )}
               </div>
               <textarea placeholder="Descrição..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full bg-gray-50 border p-4 rounded-2xl text-sm outline-none" />
+              
               <div className="grid grid-cols-2 gap-4">
-                <input type="number" placeholder="Desconto %" value={formData.discount} onChange={e => setFormData({...formData, discount: e.target.value})} className="bg-gray-50 border p-4 rounded-xl text-sm" />
-                <input type="date" value={formData.expiresAt} onChange={e => setFormData({...formData, expiresAt: e.target.value})} className="bg-gray-50 border p-4 rounded-xl text-xs" />
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Desconto %</label>
+                  <input type="number" placeholder="Ex: 50" value={formData.discount} onChange={e => setFormData({...formData, discount: e.target.value})} className="w-full bg-gray-50 border p-4 rounded-xl text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Início</label>
+                  <input type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} className="w-full bg-gray-50 border p-4 rounded-xl text-xs" />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Expira em</label>
+                <input type="date" value={formData.expiresAt} onChange={e => setFormData({...formData, expiresAt: e.target.value})} className="w-full bg-gray-50 border p-4 rounded-xl text-xs" />
               </div>
             </div>
 
             <button onClick={handleCreatePromo} disabled={loading} className="w-full py-5 bg-indigo-600 rounded-[24px] font-black text-white flex items-center justify-center gap-3 disabled:opacity-50">
               {loading ? <Loader2 className="animate-spin" size={24} /> : <Zap size={20} />}
-              {loading ? 'PUBLICANDO...' : 'PUBLICAR NO FIREBASE'}
+              {loading ? 'SALVANDO...' : (editingPromo ? 'ATUALIZAR OFERTA' : 'PUBLICAR AGORA')}
             </button>
           </div>
         </div>
