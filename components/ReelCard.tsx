@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Promotion } from '../types';
 import { Heart, MessageCircle, Share2, Bookmark, MapPin, MoreHorizontal, CheckCircle, X, Flag, Ban, Volume2, VolumeX, Send } from 'lucide-react';
 import { toggleSavePromotion, toggleLikePromotion, incrementPromotionView, getUserMetadata, getAuthUser, blockUser } from '../constants';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { logViewPromotion, logClickVisitStore } from '../utils/analytics';
 import ReportModal from './ReportModal';
 import CommentsModal from './CommentsModal';
@@ -23,6 +24,8 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
   const [isProcessing, setIsProcessing] = useState(false);
   const [savePop, setSavePop] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showHeartAnimation, setShowHeartAnimation] = useState(false);
+  const [lastTap, setLastTap] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
@@ -188,6 +191,22 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
     }
   };
 
+  const handleTap = () => {
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      // Double tap
+      if (!isLiked) {
+        handleLike();
+        setShowHeartAnimation(true);
+        setTimeout(() => setShowHeartAnimation(false), 800);
+      }
+    } else {
+      // Single tap (fullscreen)
+      if (!disableFullscreen) setIsFullscreen(true);
+    }
+    setLastTap(now);
+  };
+
   return (
     <>
     <div ref={containerRef} id={`promo-${promotion.id}`} className="relative w-full bg-white flex flex-col shadow-sm border-b border-gray-100 mb-2">
@@ -263,8 +282,13 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
       {/* Main Content Area (Video or Image) */}
       <div 
         className="relative w-full aspect-[4/5] bg-white overflow-hidden flex items-center justify-center group cursor-pointer"
-        onClick={() => !disableFullscreen && setIsFullscreen(true)}
+        onClick={handleTap}
       >
+        {showHeartAnimation && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center animate-in fade-in zoom-in duration-300">
+            <Heart size={100} className="text-rose-500 fill-rose-500" />
+          </div>
+        )}
         {promotion.videoUrl ? (
           <>
             <video 
@@ -290,7 +314,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
           </>
         ) : (
           <img 
-            src={promotion.imageUrl} 
+            src={getOptimizedImageUrl(promotion.imageUrl)} 
             alt={promotion.description}
             className="w-full h-full object-contain relative z-10"
           />
@@ -407,7 +431,7 @@ const ReelCard: React.FC<ReelCardProps> = ({ promotion, onStoreClick, onOpenChat
           />
         ) : (
           <img 
-            src={promotion.imageUrl} 
+            src={getOptimizedImageUrl(promotion.imageUrl)} 
             alt={promotion.description}
             className="w-full h-full object-contain"
           />

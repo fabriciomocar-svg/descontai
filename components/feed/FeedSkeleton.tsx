@@ -21,7 +21,7 @@ export const FeedSkeleton: React.FC = () => {
       </div>
 
       {/* Reel Card Skeleton */}
-      <div className="flex-1 bg-white flex flex-col relative">
+      <div className="flex-1 bg-white flex flex-col relative border-b border-gray-100 mb-2">
         {/* Card Header */}
         <div className="flex items-center justify-between p-3 px-4 bg-white z-10 relative">
           <div className="flex items-center gap-3">
@@ -38,7 +38,7 @@ export const FeedSkeleton: React.FC = () => {
         </div>
 
         {/* Video Area */}
-        <div className="flex-1 bg-gray-100 flex items-center justify-center">
+        <div className="w-full aspect-[4/5] bg-gray-100 flex items-center justify-center">
           <Skeleton className="w-full h-full rounded-none" />
         </div>
 

@@ -1,7 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, CheckCircle, Loader2, X, Trash2, ShieldCheck, Zap, Camera, Edit3, LogOut, Film, Image as ImageIcon, Calendar, Percent, Trash, Eye, Heart, Bookmark, TrendingUp, BarChart3, Wand2, LayoutGrid, Settings, MousePointerClick, MessageCircle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { saveLocalPromotion, getAuthUser, logoutUser, getStoreById, deletePromotion } from '../constants';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { Promotion, ViewType, Store } from '../types';
 import { usePromotions } from '../hooks/usePromotions';
 import { useChat } from '../hooks/useChat';
@@ -276,36 +278,24 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
 
       <div className="mb-8">
         <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Resumo de Estatísticas</h2>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="bg-blue-50 p-2 rounded-xl text-blue-500"><Eye size={16} /></div>
-            </div>
-            <div>
-              <p className="text-xl font-black text-gray-800">{stats.views}</p>
-              <span className="text-[9px] font-bold text-gray-400 uppercase">Visualizações</span>
-            </div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="bg-rose-50 p-2 rounded-xl text-rose-500"><Heart size={16} /></div>
-            </div>
-            <div>
-              <p className="text-xl font-black text-gray-800">{stats.likes}</p>
-              <span className="text-[9px] font-bold text-gray-400 uppercase">Curtidas</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="bg-purple-50 p-2 rounded-xl text-purple-500"><Bookmark size={16} /></div>
-            </div>
-            <div>
-              <p className="text-xl font-black text-gray-800">{stats.saves}</p>
-              <span className="text-[9px] font-bold text-gray-400 uppercase">Salvamentos</span>
-            </div>
-          </div>
+        <div className="h-64 bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={[
+              { name: 'Visualizações', value: stats.views, color: '#3b82f6' },
+              { name: 'Curtidas', value: stats.likes, color: '#f43f5e' },
+              { name: 'Salvamentos', value: stats.saves, color: '#a855f7' },
+            ]}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis fontSize={10} tickLine={false} axisLine={false} />
+              <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+              <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                {[0, 1, 2].map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={['#3b82f6', '#f43f5e', '#a855f7'][index]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -353,7 +343,7 @@ const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onViewChange, onO
                   {promo.videoUrl ? (
                     <video src={promo.videoUrl} className="w-full h-full object-cover" />
                   ) : promo.imageUrl ? (
-                    <img src={promo.imageUrl} alt="Promo" className="w-full h-full object-cover" />
+                    <img src={getOptimizedImageUrl(promo.imageUrl, 100)} alt="Promo" className="w-full h-full object-cover" />
                   ) : (
                     <div className="text-gray-300"><ImageIcon size={24} /></div>
                   )}

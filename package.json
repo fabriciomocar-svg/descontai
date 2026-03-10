@@ -13,6 +13,9 @@
     "deploy:all": "npm run build && firebase deploy"
   },
   "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
     "@sentry/react": "^10.42.0",
     "@tailwindcss/vite": "^4.2.1",
     "firebase": "^12.10.0",
@@ -22,6 +25,7 @@
     "react-dom": "19.0.0",
     "react-router-dom": "^7.13.1",
     "react-virtuoso": "^4.18.3",
+    "recharts": "^3.8.0",
     "tailwindcss": "^4.2.1"
   },
   "devDependencies": {

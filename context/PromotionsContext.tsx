@@ -53,7 +53,7 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
     const q = query(
       collection(db, 'promotions'),
       orderBy('createdAt', 'desc'),
-      limit(300) 
+      limit(20) 
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -247,8 +247,20 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
 
   // Carregar inicial
   useEffect(() => {
+    const cachedPromos = localStorage.getItem('promotions_cache');
+    if (cachedPromos) {
+      setPromotions(JSON.parse(cachedPromos));
+      setLoading(false);
+    }
     fetchPromotions(true);
   }, []);
+
+  // Salvar no cache sempre que as promoções mudarem
+  useEffect(() => {
+    if (promotions.length > 0) {
+      localStorage.setItem('promotions_cache', JSON.stringify(promotions));
+    }
+  }, [promotions]);
 
   // Listener para atualizações em tempo real (novas, removidas e editadas)
   useEffect(() => {
@@ -258,7 +270,7 @@ const PromotionsContext = createContext<PromotionsContextType | undefined>(undef
     const q = query(
       collection(db, 'promotions'),
       orderBy('createdAt', 'desc'),
-      limit(100)
+      limit(20)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
